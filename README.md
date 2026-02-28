@@ -22,7 +22,7 @@ powr-workmaxxing status
 # → "No active workflow."
 ```
 
-Done. Works from any repo.
+Done. Works from any repo, any terminal.
 
 ---
 
@@ -97,6 +97,36 @@ You never need to remember gate names, stage names, or CLI flags. Claude knows t
 
 ---
 
+## Parallel terminals
+
+Open as many terminals as you want. Each one gets its own isolated workflow.
+
+```bash
+# Terminal 1
+powr-workmaxxing start "auth overhaul"
+# → Workflow started: "auth overhaul"
+# → ID: abc-123
+# →
+# → Set this in your terminal to scope all commands:
+# →   export POWR_WF=abc-123
+
+# Terminal 2
+powr-workmaxxing start "weight trends"
+# → export POWR_WF=def-456
+
+# Terminal 3
+powr-workmaxxing start "meal planning"
+# → export POWR_WF=ghi-789
+```
+
+Each terminal only sees its own workflow. Terminal 1 can advance to PLANNING while terminals 2 and 3 are still in SPECCING. No overlap, no conflicts, no shared state.
+
+**How isolation works:** `POWR_WF` is an env var scoped to your shell session. Every command reads it to know which workflow to operate on. Different terminal = different `POWR_WF` = different workflow.
+
+You can also pass it explicitly: `powr-workmaxxing status -w abc-123`
+
+---
+
 ## Escape hatches
 
 Sometimes you just want to code without a workflow.
@@ -128,9 +158,9 @@ Feature:  SPEC → PLAN → REVIEW → TICKETS → EXECUTE → SHIP → IDLE
 Ticket:   QUEUE → INVESTIGATE → IMPLEMENT → REVIEW → CROSSREF → FIX → VERIFY → DONE
 ```
 
-**SQLite.** All state lives in `~/.powr/workflow.db`. No more `.gates` files, `SESSION_WORKFLOW` markers, or stale state bugs. One database, shared across all repos.
+**SQLite.** All state lives in `~/.powr/workflow.db`. WAL mode + 5s busy timeout handles 9 concurrent writers without conflicts. No more `.gates` files, `SESSION_WORKFLOW` markers, or stale state bugs.
 
-**Linear MCP.** Ticket creation and updates go through the Linear MCP plugin you already have. No separate API keys.
+**Linear MCP.** Ticket creation and updates go through the Linear MCP plugin you already have. No separate API keys or SDK dependencies.
 
 **CLI.** `powr-workmaxxing` is a TypeScript CLI that Claude calls via `Bash()`. Hooks read SQLite directly. One binary, globally installed.
 
@@ -139,6 +169,8 @@ You ←→ Claude Code ←→ powr-workmaxxing CLI (state) + Linear MCP (tickets
                   ↑
             Skills orchestrate both
 ```
+
+**Workflow isolation.** Each `start` creates a new workflow with a UUID. The `POWR_WF` env var scopes all commands to that UUID. Multiple workflows can exist for the same repo simultaneously — they never touch each other's state.
 
 ---
 
@@ -155,3 +187,4 @@ You ←→ Claude Code ←→ powr-workmaxxing CLI (state) + Linear MCP (tickets
 | View audit trail | `powr-workmaxxing audit log` |
 | Clean up stale state | `powr-workmaxxing session cleanup` |
 | Preview tickets from a plan | `powr-workmaxxing tickets preview plan.md` |
+| Scope to a specific workflow | `export POWR_WF=<id>` or `-w <id>` |
