@@ -85,7 +85,7 @@ for REPO in "${REPOS[@]}"; do
   echo "   Keeping notif-done.sh, notif-attention.sh (not migrated)"
 
   # Symlink skills
-  SKILL_TARGET="$REPO/.claude/skills/workmaxxing"
+  SKILL_TARGET="$REPO/.claude/skills/powr"
   if [[ "$DRY_RUN" == "false" ]]; then
     mkdir -p "$SKILL_TARGET"
   fi
