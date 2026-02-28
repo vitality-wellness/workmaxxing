@@ -31,26 +31,36 @@ powr-workmaxxing install
 
 ### `/powr:spec` — "What are we building?"
 
-Claude interviews you, writes a spec doc, moves on.
+Claude asks you what problem you're solving, who it's for, what success looks like, what's in scope and out of scope. Explores the codebase to understand what existing code it touches. Writes a spec doc and saves it.
 
 ### `/powr:plan` — "How are we building it?"
 
-Claude writes a plan, reviews it with you (architecture, quality, tests, performance, ticket breakdown), then creates Linear tickets.
+Claude reads the spec, explores the codebase, and writes a step-by-step implementation plan. Before you see it, it goes through a 5-section review with you:
+
+1. **Architecture** — are the component boundaries right?
+2. **Code quality** — DRY violations, missing error handling, edge cases?
+3. **Tests** — what's not covered?
+4. **Performance** — N+1 queries, memory issues, caching opportunities?
+5. **Ticket decomposition** — do the steps break into clean tickets?
+
+For each issue found, you pick from options. After all 5 sections pass, the plan gets decomposed into Linear tickets with dependencies, estimates, labels, and acceptance criteria.
 
 ### `/powr:execute` — "Build it."
 
 ```
 /powr:execute POWR-500              ← one ticket
-/powr:execute cycle "Sprint 12"     ← all tickets in cycle, parallel worktrees
+/powr:execute cycle "Sprint 12"     ← all tickets in cycle
 /powr:execute project "MVP Launch"  ← all tickets in project
 /powr:execute                       ← next unblocked ticket
 ```
 
-Batches build a dependency graph and run in parallel waves — independent tickets get their own worktrees simultaneously.
+**Single ticket:** Claude reads the ticket, investigates the codebase, implements, commits, runs CodeRabbit review, cross-references findings with existing tickets, fixes issues, verifies acceptance criteria, and marks it done. Six quality gates — can't skip any.
+
+**Batch:** Claude builds a dependency graph, groups independent tickets into waves, and runs each wave in parallel worktrees. Wave 1 finishes, merges to main, wave 2 starts. You approve each wave before it launches.
 
 ### `/powr:ship` — "We're done."
 
-Final checks, static analysis, close it out.
+Claude verifies all tickets are done, runs static analysis (`dart analyze`, `go vet`, or `npm run build` depending on the repo), checks everything is committed, and closes out the workflow with a summary.
 
 ---
 
