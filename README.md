@@ -150,7 +150,7 @@ powr-workmaxxing session cleanup  # something stuck?
 
 ## Parallel terminals
 
-Open 9 terminals. Each gets its own isolated workflow. They don't interfere.
+Open as many terminals as you want. Each gets its own isolated workflow. They don't interfere.
 
 ---
 
