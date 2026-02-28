@@ -1,4 +1,4 @@
-# powr-workmaxxing
+# workmaxxing
 
 Your dev workflow in 4 words.
 
