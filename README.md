@@ -29,7 +29,7 @@ powr-workmaxxing install
 
 ## How it works
 
-### `/powr-spec` — "What are we building?"
+### `/powr spec` — "What are we building?"
 
 Claude interviews you — what problem you're solving, who it's for, what success looks like, what's in and out of scope. It explores the codebase to understand what existing code is involved, then asks follow-up questions based on what it finds.
 
@@ -44,7 +44,7 @@ Based on your answers, it determines the right scope:
 
 It confirms the scope with you, then writes a spec doc.
 
-### `/powr-plan` — "How are we building it?"
+### `/powr plan` — "How are we building it?"
 
 Claude reads the spec, explores the codebase, and writes a step-by-step implementation plan. Before you see it, it goes through a 5-section review with you:
 
@@ -56,20 +56,20 @@ Claude reads the spec, explores the codebase, and writes a step-by-step implemen
 
 For each issue found, you pick from options. After all 5 sections pass, the plan gets decomposed into Linear tickets with dependencies, estimates, labels, and acceptance criteria.
 
-### `/powr-execute` — "Build it."
+### `/powr execute` — "Build it."
 
 ```
-/powr-execute POWR-500              ← one ticket
-/powr-execute cycle "Sprint 12"     ← all tickets in cycle
-/powr-execute project "MVP Launch"  ← all tickets in project
-/powr-execute                       ← next unblocked ticket
+/powr execute POWR-500              ← one ticket
+/powr execute cycle "Sprint 12"     ← all tickets in cycle
+/powr execute project "MVP Launch"  ← all tickets in project
+/powr execute                       ← next unblocked ticket
 ```
 
 **Single ticket:** Claude reads the ticket, investigates the codebase, implements, commits, runs CodeRabbit review, cross-references findings with existing tickets, fixes issues, verifies acceptance criteria, and marks it done. Six quality gates — can't skip any.
 
 **Batch:** Claude builds a dependency graph, groups independent tickets into waves, and runs each wave in parallel worktrees. Wave 1 finishes, merges to main, wave 2 starts. You approve each wave before it launches.
 
-### `/powr-ship` — "We're done."
+### `/powr ship` — "We're done."
 
 Claude verifies all tickets are done, runs static analysis (`dart analyze`, `go vet`, or `npm run build` depending on the repo), checks everything is committed, and closes out the workflow with a summary.
 
@@ -262,7 +262,7 @@ STALE WORKFLOW: "auth overhaul" (EXECUTING) — last activity 3h ago.
 
 ```
 You ←→ Claude Code
-         ├── Skills (/powr-spec, /powr-plan, /powr-execute, /powr-ship)
+         ├── Skills (/powr spec, /powr plan, /powr execute, /powr ship)
          │     ├── Bash(powr-workmaxxing <command>)  — state
          │     └── Linear MCP                        — tickets
          └── Hooks (powr-hook.sh, 11 handlers)
