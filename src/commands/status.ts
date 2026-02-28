@@ -20,7 +20,7 @@ export const statusCommand = new Command("status")
       if (opts.json) {
         console.log(JSON.stringify({ status: "idle", workflow: null }));
       } else {
-        console.log("No active workflow. Use `powr-workflow start <name>` to begin.");
+        console.log("No active workflow. Use `powr-workmaxxing start <name>` to begin.");
       }
       return;
     }

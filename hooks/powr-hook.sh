@@ -52,7 +52,7 @@ handle_require_ticket() {
   ACTIVE=$(query "SELECT 1 FROM workflows WHERE active=1 AND repo='$PROJECT_DIR' LIMIT 1")
   if [[ -n "$ACTIVE" ]]; then exit 0; fi
 
-  deny "No active workflow. Use \`powr-workflow start <name>\` to begin, or \`powr-workflow bypass\` for non-ticket work."
+  deny "No active workflow. Use \`powr-workmaxxing start <name>\` to begin, or \`powr-workmaxxing bypass\` for non-ticket work."
 }
 
 handle_detect_work() {
@@ -70,7 +70,7 @@ handle_detect_work() {
   FEATURE=$(query "SELECT feature_name FROM workflows WHERE active=1 AND repo='$PROJECT_DIR' ORDER BY updated_at DESC LIMIT 1")
 
   if [[ -n "$STAGE" ]]; then
-    echo "ACTIVE WORKFLOW: \"$FEATURE\" | Stage: $STAGE | Use \`powr-workflow status\` for details."
+    echo "ACTIVE WORKFLOW: \"$FEATURE\" | Stage: $STAGE | Use \`powr-workmaxxing status\` for details."
   fi
 }
 

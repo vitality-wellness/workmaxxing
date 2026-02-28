@@ -20,7 +20,7 @@ export const startCommand = new Command("start")
     if (existing) {
       console.error(
         `Error: Active workflow already exists: "${existing.featureName}" (${existing.stage}). ` +
-          `Use \`powr-workflow advance\` or \`powr-workflow abandon\` first.`
+          `Use \`powr-workmaxxing advance\` or \`powr-workmaxxing abandon\` first.`
       );
       process.exit(1);
     }

@@ -13,7 +13,7 @@ import { auditCommand } from "./commands/audit.js";
 const program = new Command();
 
 program
-  .name("powr-workflow")
+  .name("powr-workmaxxing")
   .description(
     "Development workflow engine — state machine, gates, Linear integration"
   )

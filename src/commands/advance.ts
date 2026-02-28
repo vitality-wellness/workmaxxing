@@ -20,7 +20,7 @@ export const advanceCommand = new Command("advance")
 
     const workflow = workflows.findActiveForRepo(opts.repo);
     if (!workflow) {
-      console.error("Error: No active workflow. Use `powr-workflow start <name>` first.");
+      console.error("Error: No active workflow. Use `powr-workmaxxing start <name>` first.");
       process.exit(1);
     }
 

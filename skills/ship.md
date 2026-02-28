@@ -8,7 +8,7 @@ Final stage: verify everything is complete and close out the workflow.
 
 1. **Check all tickets are done:**
    ```bash
-   powr-workflow status --repo "$CLAUDE_PROJECT_DIR" --json
+   powr-workmaxxing status --repo "$CLAUDE_PROJECT_DIR" --json
    ```
 
 2. **Run static analysis** (repo-appropriate):
@@ -25,8 +25,8 @@ Final stage: verify everything is complete and close out the workflow.
 
 5. **Complete the workflow:**
    ```bash
-   powr-workflow gate record ship_verified --evidence '{"verified":true}'
-   powr-workflow advance  # SHIPPING → IDLE
+   powr-workmaxxing gate record ship_verified --evidence '{"verified":true}'
+   powr-workmaxxing advance  # SHIPPING → IDLE
    ```
 
 6. Tell the user the workflow is complete with a summary of what was accomplished.

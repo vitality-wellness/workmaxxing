@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Install powr-workflow hooks into all POWR repos.
+# Install powr-workmaxxing hooks into all POWR repos.
 #
 # What it does:
 # 1. Moves old bash hooks to _legacy/ (preserves for rollback)
@@ -90,6 +90,6 @@ echo "Done! Hooks installed from $HOOK_SOURCE"
 echo ""
 echo "Next steps:"
 echo "  1. Update settings.local.json in each repo to point to powr-hook.sh"
-echo "  2. Test: powr-workflow status"
+echo "  2. Test: powr-workmaxxing status"
 echo ""
 echo "To rollback: mv .claude/hooks/_legacy/* .claude/hooks/"

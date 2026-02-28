@@ -1,4 +1,4 @@
-# powr-workflow
+# powr-workmaxxing
 
 Your dev workflow in 4 words.
 
@@ -14,11 +14,11 @@ That's it. Say the word, Claude handles the rest.
 
 ```bash
 # 1. Install
-cd ~/Dev/vitality/powr-workflow
+cd ~/Dev/vitality/powr-workmaxxing
 npm install && npm run build && npm link
 
 # 2. Verify
-powr-workflow status
+powr-workmaxxing status
 # → "No active workflow."
 ```
 
@@ -103,16 +103,16 @@ Sometimes you just want to code without a workflow.
 
 ```bash
 # Skip the workflow entirely
-powr-workflow bypass
+powr-workmaxxing bypass
 
 # Check where you are
-powr-workflow status
+powr-workmaxxing status
 
 # See what happened
-powr-workflow audit log
+powr-workmaxxing audit log
 
 # Something stuck? Clean up
-powr-workflow session cleanup
+powr-workmaxxing session cleanup
 ```
 
 ---
@@ -132,10 +132,10 @@ Ticket:   QUEUE → INVESTIGATE → IMPLEMENT → REVIEW → CROSSREF → FIX �
 
 **Linear MCP.** Ticket creation and updates go through the Linear MCP plugin you already have. No separate API keys.
 
-**CLI.** `powr-workflow` is a TypeScript CLI that Claude calls via `Bash()`. Hooks read SQLite directly. One binary, globally installed.
+**CLI.** `powr-workmaxxing` is a TypeScript CLI that Claude calls via `Bash()`. Hooks read SQLite directly. One binary, globally installed.
 
 ```
-You ←→ Claude Code ←→ powr-workflow CLI (state) + Linear MCP (tickets)
+You ←→ Claude Code ←→ powr-workmaxxing CLI (state) + Linear MCP (tickets)
                   ↑
             Skills orchestrate both
 ```
@@ -150,8 +150,8 @@ You ←→ Claude Code ←→ powr-workflow CLI (state) + Linear MCP (tickets)
 | Plan and create tickets | `/plan` |
 | Build the tickets | `/execute` |
 | Finish up | `/ship` |
-| Skip the workflow | `powr-workflow bypass` |
-| Check status | `powr-workflow status` |
-| View audit trail | `powr-workflow audit log` |
-| Clean up stale state | `powr-workflow session cleanup` |
-| Preview tickets from a plan | `powr-workflow tickets preview plan.md` |
+| Skip the workflow | `powr-workmaxxing bypass` |
+| Check status | `powr-workmaxxing status` |
+| View audit trail | `powr-workmaxxing audit log` |
+| Clean up stale state | `powr-workmaxxing session cleanup` |
+| Preview tickets from a plan | `powr-workmaxxing tickets preview plan.md` |

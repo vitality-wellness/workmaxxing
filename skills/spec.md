@@ -8,7 +8,7 @@ You are gathering requirements for a new feature. Follow this workflow:
 
 1. **Start the workflow:**
    ```bash
-   powr-workflow start "<feature-name>" --repo "$CLAUDE_PROJECT_DIR"
+   powr-workmaxxing start "<feature-name>" --repo "$CLAUDE_PROJECT_DIR"
    ```
 
 2. **Interview the user** using AskUserQuestion for each:
@@ -36,8 +36,8 @@ You are gathering requirements for a new feature. Follow this workflow:
 
 4. **Record the gate and advance:**
    ```bash
-   powr-workflow gate record spec_document_written --evidence '{"path":".claude/specs/<name>.md"}'
-   powr-workflow advance
+   powr-workmaxxing gate record spec_document_written --evidence '{"path":".claude/specs/<name>.md"}'
+   powr-workmaxxing advance
    ```
 
 5. Tell the user: "Spec complete. Use `/plan` to create an implementation plan."

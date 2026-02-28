@@ -10,7 +10,7 @@ You are creating an implementation plan and decomposing it into Linear tickets.
 
 1. **Check workflow state:**
    ```bash
-   powr-workflow status --repo "$CLAUDE_PROJECT_DIR"
+   powr-workmaxxing status --repo "$CLAUDE_PROJECT_DIR"
    ```
 
 2. **Read the spec** (if exists) from `.claude/specs/`
@@ -21,7 +21,7 @@ You are creating an implementation plan and decomposing it into Linear tickets.
 
 5. **Record gate:**
    ```bash
-   powr-workflow gate record plan_written --evidence '{"path":".claude/plans/<name>.md"}'
+   powr-workmaxxing gate record plan_written --evidence '{"path":".claude/plans/<name>.md"}'
    ```
 
 ### Phase 2: Interactive Review
@@ -40,7 +40,7 @@ Before ExitPlanMode, review the plan across 5 sections. For each section:
 
 After each section approved, record the gate:
 ```bash
-powr-workflow gate record review_architecture --evidence '{"approved":true}'
+powr-workmaxxing gate record review_architecture --evidence '{"approved":true}'
 # ... repeat for all 5
 ```
 
@@ -48,8 +48,8 @@ powr-workflow gate record review_architecture --evidence '{"approved":true}'
 
 After all reviews pass:
 ```bash
-powr-workflow advance  # REVIEWING → TICKETING
-powr-workflow tickets preview .claude/plans/<name>.md --json
+powr-workmaxxing advance  # REVIEWING → TICKETING
+powr-workmaxxing tickets preview .claude/plans/<name>.md --json
 ```
 
 This outputs structured JSON with ticket specs. For each spec, use the **Linear MCP** to create tickets:
@@ -70,8 +70,8 @@ For sub-tickets, set `parentId` to the parent issue ID. For dependencies, set `b
 
 After all tickets created:
 ```bash
-powr-workflow gate record tickets_created --evidence '{"ticketIds":["POWR-XXX","POWR-YYY"]}'
-powr-workflow advance  # TICKETING → EXECUTING
+powr-workmaxxing gate record tickets_created --evidence '{"ticketIds":["POWR-XXX","POWR-YYY"]}'
+powr-workmaxxing advance  # TICKETING → EXECUTING
 ```
 
 Tell the user: "Plan reviewed and tickets created. Use `/execute` to start working through them."
