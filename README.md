@@ -25,7 +25,7 @@ That's it. Say the word, Claude handles the rest.
 ## Setup
 
 ```bash
-git clone <repo-url> ~/.powr/src
+git clone https://github.com/vitality-wellness/workmaxxing.git ~/.powr/src
 cd ~/.powr/src && npm install && npm run build && npm link
 powr-workmaxxing setup
 ```
@@ -49,9 +49,9 @@ Here's what a real session looks like, start to finish.
 You:    /powr spec add weight trend analytics
 ```
 
-Claude starts a conversation. It'll ask what problem you're solving, who uses it, what success looks like, what's in and out of scope. It's not a form — it's a back-and-forth. Give vague answers and it'll push for specifics.
+Claude starts a conversation. It'll ask what problem you're solving, who uses it, what success looks like, what's in and out of scope. It's not a form — it's a back-and-forth. Give vague answers and it'll push for specifics. Every question requires a real response — if your answer comes through empty (e.g., permissions auto-skip), Claude stops and re-asks instead of making things up.
 
-While you're talking, Claude searches Linear for anything that overlaps (existing tickets, related projects, past attempts that were canceled). If something already exists, it'll tell you before you waste time re-speccing it.
+While you're talking, Claude searches Linear for anything that overlaps — in **every status**: done, in progress, in review, todo, backlog, canceled. If something was already built, is actively being worked on, or was attempted and canceled, it'll tell you before you waste time re-speccing it.
 
 It also explores the codebase to understand what code is involved, then asks follow-up questions based on what it finds.
 
@@ -86,9 +86,11 @@ Then it walks you through a 5-section review:
 4. **Performance** — N+1 queries, memory, caching?
 5. **Ticket decomposition** — do the steps break into clean tickets?
 
-For each issue it finds, it gives you options and a recommendation. You pick. After all 5 sections pass, it creates Linear tickets automatically — with dependencies, estimates, labels, and acceptance criteria.
+For each issue it finds, it gives you options and a recommendation. You pick. After all 5 sections pass, it creates Linear tickets automatically — with dependencies, estimates, labels, and acceptance criteria. A ticket is **always** created, even for small single-ticket features. No skipping, no placeholder IDs.
 
-Before creating each ticket, it checks if one already exists. No duplicates.
+Before creating each ticket, it checks Linear across **all statuses** — done, in progress, in review, todo, backlog, canceled. No duplicates, no re-doing finished work.
+
+After tickets are created, the spec file is cleaned up — it's been fully absorbed into the plan and tickets.
 
 **When it's done:** "Tickets created. Type `/powr execute` to start building."
 
@@ -128,7 +130,11 @@ You approve. It launches. Wave 1 finishes, merges to main, wave 2 starts. You ap
 You:    /powr ship
 ```
 
-Claude checks all tickets are done, looks for orphaned tickets or unresolved sub-issues, runs static analysis (`dart analyze`, `go vet`, or `npm run build` depending on the repo), verifies everything is committed, and gives you a summary of what was built vs what was planned.
+Claude verifies **every ticket passed through all 6 gates** — investigation, code committed, code review, cross-reference, fix findings, verify ACs. If any ticket skipped a gate or isn't in DONE, it stops and tells you what's missing. Nothing ships until everything checks out.
+
+Then it audits the ticket landscape — orphaned tickets, open sub-issues, in-progress work that should have been completed, planned vs actually built. It runs static analysis, verifies everything is committed, and gives you a summary.
+
+The plan file is cleaned up after shipping — tickets are the historical record.
 
 **When it's done:** "Workflow complete." That's it. Start the next one whenever you want.
 
@@ -254,14 +260,14 @@ Claude checks the full Linear landscape at 8 points in the workflow:
 
 | When | What it checks |
 |---|---|
-| **Spec start** | Existing tickets/projects that overlap. Prior attempts. |
+| **Spec start** | All statuses: done (already built?), in progress (active work?), todo/backlog (planned?), canceled (why?). |
 | **Plan start** | Upcoming tickets in same area. Established patterns. Planned refactors. |
-| **Ticket creation** | Duplicates. Tickets that could be extended instead. |
+| **Ticket creation** | All statuses: duplicates, done work, active work, planned work. Extend or link instead of duplicating. |
 | **Investigation** | Project context. What was just built. What's coming next. |
 | **Implementation** | Future tickets touching same files. Parallel worktree conflicts. |
 | **Cross-reference** | ALL tickets (every project, backlog, future) for existing coverage. |
 | **Completion** | What this unblocks. |
-| **Ship** | Orphaned tickets. Unresolved sub-tickets. Planned vs built. |
+| **Ship** | All gates passed per ticket. Orphaned tickets. Unresolved sub-tickets. Skipped reviews. Planned vs built. |
 
 ---
 

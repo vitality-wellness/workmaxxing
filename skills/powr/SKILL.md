@@ -22,6 +22,17 @@ Parse the user's subcommand and follow the corresponding section below.
 
 ---
 
+## Global Rule: User Responses Must Be Real
+
+Every AskUserQuestion in this workflow **requires a real, non-empty user response**. If a response comes back empty, blank, or with no selections made:
+- **Do NOT proceed** as if the user approved or answered.
+- **Do NOT infer** what the user would have said.
+- Re-ask the question. If it fails again, stop and tell the user: "I can't proceed without your input on this. Please respond to the question above."
+
+This applies to all phases: spec interviews, review approvals, scope decisions, and ticket creation.
+
+---
+
 ## /powr spec
 
 Interview the user to understand what they want to build.
@@ -41,13 +52,14 @@ mcp__plugin_linear_linear__list_issues({ query: "<feature keywords>", team: "POW
 mcp__plugin_linear_linear__list_projects({ team: "POWR" })
 ```
 
-Look for:
-- **Existing tickets** that cover the same thing (full or partial overlap)
-- **Related projects** this might belong under
-- **Previous attempts** (canceled or completed — learn from them)
+Look for tickets in **every status** — not just open ones:
+- **Done** → already built. Tell the user: "POWR-342 'Add OAuth support' is already done. Is this an extension, or do you need something different?"
+- **In Progress / In Review** → someone's actively working on it. Flag immediately to avoid duplicate effort.
+- **Todo / Backlog** → planned but not started. Could extend instead of creating new scope.
+- **Canceled** → previous attempt failed. Learn why before re-attempting.
+- **Related projects** this might belong under.
 
-If you find overlap, tell the user immediately:
-- "There's POWR-342 'Add OAuth support' in MVP Launch. Are you extending that, or is this different?"
+If you find overlap in any status, tell the user immediately and ask how to proceed before continuing the interview.
 
 Don't skip this. The user may not know what's already in Linear.
 
@@ -62,7 +74,7 @@ Use AskUserQuestion to have a conversation. Adapt your questions — don't robot
 - **What's explicitly out of scope?**
 - **Explore the codebase** to find related code, then share what you found to validate understanding.
 
-Ask follow-ups. Dig into vague answers.
+Ask follow-ups. Dig into vague answers. **If any response comes back empty or with no selections, re-ask — do NOT proceed without real user input.** The spec depends entirely on understanding the user's intent.
 
 ### 4. Determine scope
 
@@ -190,23 +202,36 @@ Go through 5 sections, one at a time. For each section:
 
 ### Phase 3: Ticket Creation
 
+**Always create a Linear ticket** — even for small, single-ticket features. Every well-justified piece of scope deserves a ticket for tracking, history, and cross-referencing. Never skip ticket creation or use placeholder IDs like "no-ticket".
+
 After all reviews pass:
 ```bash
 powr-workmaxxing advance  # REVIEWING → TICKETING
 powr-workmaxxing tickets preview .claude/plans/<name>.md --json
 ```
 
-**Before creating each ticket**, check for duplicates:
+**Before creating each ticket**, check for duplicates across **all statuses** (done, in progress, in review, todo, backlog, canceled):
 ```
 mcp__plugin_linear_linear__list_issues({ query: "<title keywords>", team: "POWR", limit: 10 })
 ```
-- Existing ticket covers same scope → link instead of duplicate
-- Partial overlap → ask user: extend or create new?
+- **Done** → already built. Don't re-create. Ask user if this is an extension or revision.
+- **In Progress / In Review** → active work. Flag to user — extend that ticket or wait?
+- **Todo / Backlog** → already planned. Link or extend instead of duplicating.
+- **Canceled** → ask why before re-creating.
+- Partial overlap → ask user: extend existing or create new?
 
 Create tickets via Linear MCP. Set dependencies, labels, estimates, ACs.
 
 ```bash
 powr-workmaxxing gate record tickets_created --evidence '{"ticketIds":["POWR-XXX"]}'
+```
+
+**Clean up the spec file** — it's been fully absorbed into the plan and then into tickets. Delete it so stale artifacts don't accumulate:
+```bash
+rm .claude/specs/<name>.md
+```
+
+```bash
 powr-workmaxxing advance  # TICKETING → EXECUTING
 ```
 
@@ -304,36 +329,67 @@ Output: EXECUTE_TICKET_DONE
 
 ## /powr ship
 
-Final verification and workflow completion.
+Final verification and workflow completion. **Nothing ships until everything checks out.**
 
-1. Check all tickets done:
-   ```bash
-   powr-workmaxxing status --repo "$CLAUDE_PROJECT_DIR" --json
-   ```
+### 1. Verify every ticket completed all gates
 
-2. **Audit the ticket landscape:**
-   ```
-   mcp__plugin_linear_linear__list_issues({ project: "<project>", team: "POWR" })
-   ```
-   - Orphaned tickets (created but never executed)?
-   - Open sub-tickets from CodeRabbit findings?
-   - Planned vs actually built?
-   Report findings before proceeding.
+```bash
+powr-workmaxxing status --repo "$CLAUDE_PROJECT_DIR" --json
+```
 
-3. Run static analysis:
-   ```bash
-   powr-workmaxxing repo analyze
-   ```
+For **each ticket** in the workflow, verify it passed through every stage:
+- `investigation` — codebase explored, questions answered
+- `code_committed` — implementation committed
+- `coderabbit_review` — CodeRabbit review ran
+- `findings_crossreferenced` — findings cross-referenced with existing Linear tickets
+- `findings_resolved` — "Must Fix Now" items resolved
+- `acceptance_criteria` — ACs verified against the ticket
 
-4. Verify all changes committed
+If any ticket is **not in DONE** or skipped a gate, stop and flag it to the user. Don't proceed until resolved — either complete the missing work or get explicit user approval to ship without it.
 
-5. Post summary: what was built, planned vs completed, deferred items, open questions
+### 2. Audit the ticket landscape
 
-6. Complete:
-   ```bash
-   powr-workmaxxing gate record ship_verified --evidence '{"verified":true}'
-   powr-workmaxxing advance  # SHIPPING → IDLE
-   ```
+```
+mcp__plugin_linear_linear__list_issues({ project: "<project>", team: "POWR" })
+```
+Check for:
+- **Orphaned tickets** — created during planning but never executed
+- **Open sub-tickets** — from CodeRabbit findings or cross-referencing that weren't resolved
+- **In Review / In Progress tickets** — anything still mid-flight that should have been completed
+- **Planned vs actually built** — compare the original plan against what was delivered
+
+Report all findings before proceeding. The user decides what to do with gaps.
+
+### 3. Run static analysis
+
+```bash
+powr-workmaxxing repo analyze
+```
+
+### 4. Verify all changes committed
+
+No uncommitted or unstaged work. Run `git status` and confirm clean.
+
+### 5. Post summary
+
+- What was built (link to tickets)
+- Planned vs completed — anything deferred?
+- Open questions or follow-up work
+- Deferred items (create backlog tickets if needed)
+
+### 6. Clean up the plan file
+
+The feature is shipped, tickets are the historical record:
+```bash
+rm .claude/plans/<name>.md
+```
+
+### 7. Complete
+
+```bash
+powr-workmaxxing gate record ship_verified --evidence '{"verified":true}'
+powr-workmaxxing advance  # SHIPPING → IDLE
+```
 
 ---
 
