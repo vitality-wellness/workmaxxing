@@ -29,26 +29,26 @@ powr-workmaxxing install
 
 ## How it works
 
-### `/powr-spec` — "What are we building?"
+### `/powr:spec` — "What are we building?"
 
 Claude interviews you, writes a spec doc, moves on.
 
-### `/powr-plan` — "How are we building it?"
+### `/powr:plan` — "How are we building it?"
 
 Claude writes a plan, reviews it with you (architecture, quality, tests, performance, ticket breakdown), then creates Linear tickets.
 
-### `/powr-execute` — "Build it."
+### `/powr:execute` — "Build it."
 
 ```
-/powr-execute POWR-500              ← one ticket
-/powr-execute cycle "Sprint 12"     ← all tickets in cycle, parallel worktrees
-/powr-execute project "MVP Launch"  ← all tickets in project
-/powr-execute                       ← next unblocked ticket
+/powr:execute POWR-500              ← one ticket
+/powr:execute cycle "Sprint 12"     ← all tickets in cycle, parallel worktrees
+/powr:execute project "MVP Launch"  ← all tickets in project
+/powr:execute                       ← next unblocked ticket
 ```
 
 Batches build a dependency graph and run in parallel waves — independent tickets get their own worktrees simultaneously.
 
-### `/powr-ship` — "We're done."
+### `/powr:ship` — "We're done."
 
 Final checks, static analysis, close it out.
 
@@ -241,7 +241,7 @@ STALE WORKFLOW: "auth overhaul" (EXECUTING) — last activity 3h ago.
 
 ```
 You ←→ Claude Code
-         ├── Skills (/powr-spec, /powr-plan, /powr-execute, /powr-ship)
+         ├── Skills (/powr:spec, /powr:plan, /powr:execute, /powr:ship)
          │     ├── Bash(powr-workmaxxing <command>)  — state
          │     └── Linear MCP                        — tickets
          └── Hooks (powr-hook.sh, 11 handlers)
