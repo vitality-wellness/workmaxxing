@@ -39,74 +39,112 @@ powr-workmaxxing install
 
 ---
 
-## Commands
+## Walkthrough
 
-Everything goes through `/powr`:
+Here's what a real session looks like, start to finish.
+
+### Step 1: `/powr spec` — tell Claude what you want to build
 
 ```
-/powr spec <description>              Start here — define what to build
-/powr plan                            Plan how to build it, create tickets
-/powr execute [target]                Build it
-/powr execute POWR-500                Build one ticket
-/powr execute cycle "Sprint 12"       Build all tickets in a cycle
-/powr execute project "MVP Launch"    Build all tickets in a project
-/powr ship                            Verify and close out
-/powr status                          Where am I?
-/powr bypass                          Skip enforcement, just code
+You:    /powr spec add weight trend analytics
 ```
 
----
+Claude starts a conversation. It'll ask what problem you're solving, who uses it, what success looks like, what's in and out of scope. It's not a form — it's a back-and-forth. Give vague answers and it'll push for specifics.
 
-## What each command does
+While you're talking, Claude searches Linear for anything that overlaps (existing tickets, related projects, past attempts that were canceled). If something already exists, it'll tell you before you waste time re-speccing it.
 
-### `/powr spec` — define
+It also explores the codebase to understand what code is involved, then asks follow-up questions based on what it finds.
 
-Claude interviews you. Not a checklist — a conversation. It asks what problem you're solving, who it's for, what success looks like, what the constraints are. It explores the codebase to find related code and asks follow-ups based on what it finds.
+Based on everything, Claude figures out the right scope:
 
-Before any of that, it searches Linear for existing tickets, projects, and past attempts that overlap with what you're describing. If something already exists, it tells you.
-
-Based on your answers, it determines the right scope:
-
-| What you described | What gets created in Linear |
+| What you described | What gets created |
 |---|---|
 | Small fix or tweak | Single ticket |
 | Focused feature | Ticket with sub-tickets |
 | Multi-part feature | Multiple tickets with dependencies |
 | Large initiative | Project with milestones + tickets |
 
-Confirms with you, writes a spec doc, moves on.
+It confirms with you, then writes a spec doc and saves it.
 
-### `/powr plan` — plan + review + tickets
+**When it's done, Claude tells you.** It'll say something like "Spec complete. Type `/powr plan` when you're ready to plan the implementation."
 
-Claude reads the spec, surveys the ticket landscape (what's planned, what's in progress, what patterns were established), then writes a step-by-step implementation plan.
+You don't have to do it immediately. Come back tomorrow. The spec is saved.
 
-Before you see it, it goes through a 5-section review with you:
+### Step 2: `/powr plan` — plan, review, create tickets
+
+```
+You:    /powr plan
+```
+
+Claude picks up the spec you wrote, checks what's already planned in Linear, explores the codebase, and writes a step-by-step implementation plan.
+
+Then it walks you through a 5-section review:
 
 1. **Architecture** — component boundaries right?
 2. **Code quality** — DRY violations, missing error handling, edge cases?
 3. **Tests** — what's not covered?
 4. **Performance** — N+1 queries, memory, caching?
-5. **Ticket decomposition** — clean boundaries, dependency ordering, clear ACs?
+5. **Ticket decomposition** — do the steps break into clean tickets?
 
-For each issue, you pick from options. After all 5 pass, the plan gets decomposed into Linear tickets. Before creating each ticket, Claude checks for duplicates — if an existing ticket already covers it, it links instead of creating a new one.
+For each issue it finds, it gives you options and a recommendation. You pick. After all 5 sections pass, it creates Linear tickets automatically — with dependencies, estimates, labels, and acceptance criteria.
 
-### `/powr execute` — build
+Before creating each ticket, it checks if one already exists. No duplicates.
 
-**Single ticket:** Claude reads the ticket, checks where it fits in the project, investigates the codebase, implements, commits, runs code review, cross-references findings against ALL existing tickets (every project, backlog, future — not just current cycle), fixes issues, verifies acceptance criteria, notes what it unblocks, and marks it done. Six quality gates, can't skip any.
+**When it's done:** "Tickets created. Type `/powr execute` to start building."
 
-**Batch (cycle/project):** Claude builds a dependency graph, groups independent tickets into waves, and runs each wave in parallel worktrees. Wave 1 finishes, merges to main, wave 2 starts. You approve each wave before it launches.
+### Step 3: `/powr execute` — build the tickets
 
-### `/powr ship` — verify + close
+```
+You:    /powr execute                          ← next unblocked ticket
+You:    /powr execute POWR-500                 ← specific ticket
+You:    /powr execute cycle "Sprint 12"        ← all tickets in a cycle
+You:    /powr execute project "MVP Launch"     ← all tickets in a project
+```
 
-Claude checks all tickets are done, audits for orphaned tickets and unresolved sub-issues, runs static analysis, verifies everything is committed, and posts a summary (planned vs built, deferred items, open questions).
+**Single ticket:** Claude reads the ticket, figures out where it fits in the project, investigates the codebase, implements, commits, runs code review, cross-references findings against ALL existing tickets (every project, backlog, future — not just current cycle), fixes issues, verifies acceptance criteria, notes what it unblocks, and marks it done. Six quality gates — it can't skip any of them.
 
-### `/powr status` — where am I?
+**Batch:** Claude builds a dependency graph, groups independent tickets into waves, and runs each wave in parallel worktrees. It shows you the plan:
 
-Shows current workflow stage, gate progress, and next action.
+```
+Wave 1 (3 parallel worktrees):
+  POWR-500  OAuth provider setup     (High, 3pt)
+  POWR-502  Refresh token logic      (Normal, 3pt)
+  POWR-505  Config migration         (Normal, 1pt)
 
-### `/powr bypass` — skip it
+Wave 2 (after wave 1):
+  POWR-501  Token exchange endpoint  (High, 5pt)
+  POWR-503  Flutter login screen     (Normal, 5pt)
 
-Sometimes you just want to code. Bypass disables workflow enforcement for the current session.
+Start wave 1?
+```
+
+You approve. It launches. Wave 1 finishes, merges to main, wave 2 starts. You approve each wave.
+
+**When it's done:** "All tickets complete. Type `/powr ship` to wrap up."
+
+### Step 4: `/powr ship` — verify and close
+
+```
+You:    /powr ship
+```
+
+Claude checks all tickets are done, looks for orphaned tickets or unresolved sub-issues, runs static analysis (`dart analyze`, `go vet`, or `npm run build` depending on the repo), verifies everything is committed, and gives you a summary of what was built vs what was planned.
+
+**When it's done:** "Workflow complete." That's it. Start the next one whenever you want.
+
+---
+
+## Other commands
+
+```
+/powr status    Show current stage, gate progress, next action
+/powr bypass    Skip workflow enforcement for this session (just code)
+```
+
+```bash
+powr-workmaxxing audit log        # what happened?
+powr-workmaxxing session cleanup  # something stuck?
+```
 
 ---
 
