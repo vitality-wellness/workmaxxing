@@ -8,6 +8,7 @@ import { gateCommand } from "./commands/gate.js";
 import { sessionCommand } from "./commands/session.js";
 import { bypassCommand } from "./commands/bypass.js";
 import { ticketsCommand } from "./commands/tickets.js";
+import { auditCommand } from "./commands/audit.js";
 
 const program = new Command();
 
@@ -32,5 +33,8 @@ program.addCommand(sessionCommand);
 
 // Ticket management
 program.addCommand(ticketsCommand);
+
+// Observability
+program.addCommand(auditCommand);
 
 program.parse();
