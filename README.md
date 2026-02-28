@@ -58,25 +58,34 @@ Claude: "Created 5 tickets. Use /execute to start."
 
 ### `/execute` — "Build it."
 
-Point it at whatever scope you want — a single ticket, a cycle, a project, or nothing (picks the next unblocked ticket). Claude sorts by dependencies, shows you the plan, and works through them one at a time with quality gates.
+Point it at whatever scope you want. A single ticket runs directly. A batch (cycle, project, milestone) runs in parallel worktrees — Claude analyzes the dependency graph, groups tickets into waves, and runs each wave simultaneously.
 
 ```
-You:    /execute                          ← next unblocked ticket
-You:    /execute POWR-500                 ← one specific ticket
-You:    /execute cycle "Sprint 12"        ← every ticket in the cycle
-You:    /execute project "MVP Launch"     ← every ticket in the project
+/execute POWR-500                 ← one ticket, runs directly
+/execute cycle "Sprint 12"        ← parallel worktrees by wave
+/execute project "MVP Launch"     ← same
+/execute                          ← next unblocked ticket
 ```
 
 ```
-Claude: Ready to execute 5 tickets:
-          1. POWR-500  OAuth provider setup     (High, 3pt, unblocked)
-          2. POWR-501  Token exchange            (High, 5pt, after POWR-500)
-          3. POWR-502  Refresh logic             (Normal, 3pt, after POWR-500)
-          ...
-        Start with POWR-500?
+Claude: Execution plan for cycle "Sprint 12" (6 tickets):
+
+          Wave 1 (parallel — 3 worktrees):
+            POWR-500  OAuth provider setup     (High, 3pt)
+            POWR-502  Refresh token logic      (Normal, 3pt)
+            POWR-505  Auth config migration    (Normal, 1pt)
+
+          Wave 2 (after wave 1 — 2 worktrees):
+            POWR-501  Token exchange endpoint  (High, 5pt)
+            POWR-503  Flutter login screen     (Normal, 5pt)
+
+          Wave 3 (after wave 2):
+            POWR-504  E2E auth tests           (Normal, 3pt)
+
+        Start wave 1?
 You:    yes
-Claude: [investigates, implements, reviews, verifies ACs]
-Claude: "POWR-500 done. Starting POWR-501..."
+Claude: [3 agents launch in isolated worktrees]
+Claude: Wave 1 complete. Merging worktrees → main. Starting wave 2...
 ```
 
 ### `/ship` — "We're done."
