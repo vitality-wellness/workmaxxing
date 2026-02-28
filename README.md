@@ -3,10 +3,22 @@
 Your dev workflow in 4 words.
 
 ```
-/spec → /plan → /execute → /ship
+/powr spec → /powr plan → /powr execute → /powr ship
 ```
 
 That's it. Say the word, Claude handles the rest.
+
+---
+
+## Prerequisites
+
+**Required:**
+- [Claude Code](https://claude.com/claude-code) — the CLI
+- [Linear MCP plugin](https://linear.app) — ticket creation, status updates, comments. The entire workflow runs through Linear.
+- Node.js 20+
+
+**Recommended:**
+- [CodeRabbit](https://coderabbit.ai) Claude Code plugin — automated code review. If not installed, Claude does a self-review instead (less thorough but still enforced as a gate).
 
 ---
 
@@ -18,7 +30,7 @@ cd ~/.powr/src && npm install && npm run build && npm link
 powr-workmaxxing setup
 ```
 
-Then in any repo you want to use it:
+Then in any repo:
 
 ```bash
 cd ~/my-project
@@ -27,51 +39,74 @@ powr-workmaxxing install
 
 ---
 
-## How it works
+## Commands
 
-### `/powr spec` — "What are we building?"
+Everything goes through `/powr`:
 
-Claude interviews you — what problem you're solving, who it's for, what success looks like, what's in and out of scope. It explores the codebase to understand what existing code is involved, then asks follow-up questions based on what it finds.
+```
+/powr spec <description>              Start here — define what to build
+/powr plan                            Plan how to build it, create tickets
+/powr execute [target]                Build it
+/powr execute POWR-500                Build one ticket
+/powr execute cycle "Sprint 12"       Build all tickets in a cycle
+/powr execute project "MVP Launch"    Build all tickets in a project
+/powr ship                            Verify and close out
+/powr status                          Where am I?
+/powr bypass                          Skip enforcement, just code
+```
+
+---
+
+## What each command does
+
+### `/powr spec` — define
+
+Claude interviews you. Not a checklist — a conversation. It asks what problem you're solving, who it's for, what success looks like, what the constraints are. It explores the codebase to find related code and asks follow-ups based on what it finds.
+
+Before any of that, it searches Linear for existing tickets, projects, and past attempts that overlap with what you're describing. If something already exists, it tells you.
 
 Based on your answers, it determines the right scope:
 
-| What you described | What gets created |
+| What you described | What gets created in Linear |
 |---|---|
-| A small fix or tweak | Single ticket |
-| A focused feature | Ticket with sub-tickets |
-| Multi-part feature across several areas | Multiple tickets with dependencies |
-| Large initiative with phases | Project with milestones + tickets |
+| Small fix or tweak | Single ticket |
+| Focused feature | Ticket with sub-tickets |
+| Multi-part feature | Multiple tickets with dependencies |
+| Large initiative | Project with milestones + tickets |
 
-It confirms the scope with you, then writes a spec doc.
+Confirms with you, writes a spec doc, moves on.
 
-### `/powr plan` — "How are we building it?"
+### `/powr plan` — plan + review + tickets
 
-Claude reads the spec, explores the codebase, and writes a step-by-step implementation plan. Before you see it, it goes through a 5-section review with you:
+Claude reads the spec, surveys the ticket landscape (what's planned, what's in progress, what patterns were established), then writes a step-by-step implementation plan.
 
-1. **Architecture** — are the component boundaries right?
+Before you see it, it goes through a 5-section review with you:
+
+1. **Architecture** — component boundaries right?
 2. **Code quality** — DRY violations, missing error handling, edge cases?
 3. **Tests** — what's not covered?
-4. **Performance** — N+1 queries, memory issues, caching opportunities?
-5. **Ticket decomposition** — do the steps break into clean tickets?
+4. **Performance** — N+1 queries, memory, caching?
+5. **Ticket decomposition** — clean boundaries, dependency ordering, clear ACs?
 
-For each issue found, you pick from options. After all 5 sections pass, the plan gets decomposed into Linear tickets with dependencies, estimates, labels, and acceptance criteria.
+For each issue, you pick from options. After all 5 pass, the plan gets decomposed into Linear tickets. Before creating each ticket, Claude checks for duplicates — if an existing ticket already covers it, it links instead of creating a new one.
 
-### `/powr execute` — "Build it."
+### `/powr execute` — build
 
-```
-/powr execute POWR-500              ← one ticket
-/powr execute cycle "Sprint 12"     ← all tickets in cycle
-/powr execute project "MVP Launch"  ← all tickets in project
-/powr execute                       ← next unblocked ticket
-```
+**Single ticket:** Claude reads the ticket, checks where it fits in the project, investigates the codebase, implements, commits, runs code review, cross-references findings against ALL existing tickets (every project, backlog, future — not just current cycle), fixes issues, verifies acceptance criteria, notes what it unblocks, and marks it done. Six quality gates, can't skip any.
 
-**Single ticket:** Claude reads the ticket, investigates the codebase, implements, commits, runs CodeRabbit review, cross-references findings with existing tickets, fixes issues, verifies acceptance criteria, and marks it done. Six quality gates — can't skip any.
+**Batch (cycle/project):** Claude builds a dependency graph, groups independent tickets into waves, and runs each wave in parallel worktrees. Wave 1 finishes, merges to main, wave 2 starts. You approve each wave before it launches.
 
-**Batch:** Claude builds a dependency graph, groups independent tickets into waves, and runs each wave in parallel worktrees. Wave 1 finishes, merges to main, wave 2 starts. You approve each wave before it launches.
+### `/powr ship` — verify + close
 
-### `/powr ship` — "We're done."
+Claude checks all tickets are done, audits for orphaned tickets and unresolved sub-issues, runs static analysis, verifies everything is committed, and posts a summary (planned vs built, deferred items, open questions).
 
-Claude verifies all tickets are done, runs static analysis (`dart analyze`, `go vet`, or `npm run build` depending on the repo), checks everything is committed, and closes out the workflow with a summary.
+### `/powr status` — where am I?
+
+Shows current workflow stage, gate progress, and next action.
+
+### `/powr bypass` — skip it
+
+Sometimes you just want to code. Bypass disables workflow enforcement for the current session.
 
 ---
 
@@ -81,31 +116,20 @@ Open 9 terminals. Each gets its own isolated workflow. They don't interfere.
 
 ---
 
-## Escape hatches
-
-```bash
-powr-workmaxxing bypass           # skip the workflow, just code
-powr-workmaxxing status           # where am I?
-powr-workmaxxing audit log        # what happened?
-powr-workmaxxing session cleanup  # something stuck?
-```
-
----
-
 # Deep Dive
 
-Everything below is how the system works. You don't need it to use the slash commands.
+Everything below is how the system works. You don't need it to use `/powr`.
 
 ---
 
 ## Setup details
 
-`powr-workmaxxing install` does two things in your repo:
+`powr-workmaxxing install` symlinks two things into your repo:
 
-1. Symlinks `.claude/hooks/powr-hook.sh` — the unified hook runner
-2. Symlinks `.claude/skills/powr-*/` — the 4 workflow skills
+1. `.claude/hooks/powr-hook.sh` — the unified hook runner
+2. `.claude/skills/powr/` — the workflow skill
 
-You also need to add hooks to your `.claude/settings.local.json`. This tells Claude Code which events to route to the hook runner:
+You also need hooks in `.claude/settings.local.json`:
 
 ```json
 {
@@ -138,26 +162,35 @@ You also need to add hooks to your `.claude/settings.local.json`. This tells Cla
 }
 ```
 
-All 11 hooks route through one file (`powr-hook.sh`) with different handler arguments.
-
 ---
 
 ## Quality gates
 
-Every ticket goes through 6 mandatory gates. Hooks enforce them — you can't skip steps.
+Every ticket goes through 6 mandatory gates:
 
 ```
 INVESTIGATE → IMPLEMENT → CODE REVIEW → CROSS-REF → FIX → VERIFY ACs → DONE
 ```
 
-| Gate | What happens | How it's enforced |
+| Gate | What happens | Enforced by |
 |---|---|---|
-| **Investigation** | Explore codebase, answer 5 questions, post findings | Edit/Write on production files blocked until posted |
-| **Code committed** | Write code, commit | CodeRabbit auto-triggered after every `git commit` |
-| **CodeRabbit review** | Automated code review | Post-commit hook repeats until satisfied |
-| **Cross-reference** | Classify findings vs existing tickets | Comment auto-records gate |
+| **Investigation** | Explore codebase, post findings | Edit/Write blocked on production files until posted |
+| **Code committed** | Implement + commit | CodeRabbit auto-triggered after every commit |
+| **Code review** | CodeRabbit review (or Claude self-review if CodeRabbit not installed) | Post-commit hook repeats until satisfied |
+| **Cross-reference** | Classify findings vs ALL existing tickets | Comment auto-records gate |
 | **Fix findings** | Address "Must Fix Now" items | Auto-passes if none exist |
-| **Acceptance criteria** | Verify each AC passes | Auto-passes if ticket has no explicit ACs |
+| **Acceptance criteria** | Verify each AC | Auto-passes if no explicit ACs |
+
+### Code review fallback
+
+If CodeRabbit is installed, the code review gate uses it. If not, Claude does a self-review covering:
+- Bugs and logic errors
+- Style and naming consistency
+- Over-abstractions and unnecessary complexity
+- Missing tests
+- Security concerns
+
+Either way, the gate is enforced — code gets reviewed before proceeding.
 
 ### Auto-detection
 
@@ -166,7 +199,7 @@ Gates record automatically from Linear comment headings:
 | Comment contains | Gate |
 |---|---|
 | "Investigation Findings" | `investigation` |
-| "Code Review Findings (CodeRabbit)" | `findings_crossreferenced` |
+| "Code Review Findings" | `findings_crossreferenced` |
 | "Code Review Findings" + "Resolved" | `findings_resolved` |
 | "Acceptance Criteria Verification" + "ALL CRITERIA PASSED" | `acceptance_criteria` |
 
@@ -174,6 +207,23 @@ Gates record automatically from Linear comment headings:
 
 - No "Must Fix Now" items → `findings_resolved` auto-passes
 - No explicit ACs in description → `acceptance_criteria` auto-passes
+
+---
+
+## Ticket awareness
+
+Claude checks the full Linear landscape at 8 points in the workflow:
+
+| When | What it checks |
+|---|---|
+| **Spec start** | Existing tickets/projects that overlap. Prior attempts. |
+| **Plan start** | Upcoming tickets in same area. Established patterns. Planned refactors. |
+| **Ticket creation** | Duplicates. Tickets that could be extended instead. |
+| **Investigation** | Project context. What was just built. What's coming next. |
+| **Implementation** | Future tickets touching same files. Parallel worktree conflicts. |
+| **Cross-reference** | ALL tickets (every project, backlog, future) for existing coverage. |
+| **Completion** | What this unblocks. |
+| **Ship** | Orphaned tickets. Unresolved sub-tickets. Planned vs built. |
 
 ---
 
@@ -197,21 +247,7 @@ Only production code is gated:
 | powr-api | `internal/`, `cmd/` | `go vet ./...` |
 | website | `src/` | `npm run build` |
 
-Config files, tests, docs — no gate. Configured in `~/.powr/repos.json`.
-
----
-
-## Plan review
-
-ExitPlanMode triggers a 5-section interactive review:
-
-1. **Architecture** — boundaries, coupling, data flow, security
-2. **Code Quality** — DRY, error handling, edge cases
-3. **Tests** — coverage gaps, failure modes
-4. **Performance** — N+1, memory, caching
-5. **Ticket Decomposition** — boundaries, dependencies, AC clarity
-
-Each issue gets numbered options (recommended first). All 5 sections must be approved before ticket creation.
+Configured in `~/.powr/repos.json`.
 
 ---
 
@@ -226,7 +262,7 @@ Batches run in dependency waves:
 5. Run static analysis after merge
 6. Next wave
 
-Merge hook blocks `git merge worktree-*` if the branch has diverged — must rebase first.
+Merge hook blocks `git merge worktree-*` if branch diverged — must rebase first.
 
 ---
 
@@ -234,27 +270,15 @@ Merge hook blocks `git merge worktree-*` if the branch has diverged — must reb
 
 If context fills up mid-workflow:
 
-1. PreCompact hook reminds Claude to post a handoff comment
-2. Handoff includes: current step, completed work, remaining steps, key decisions
+1. Hook reminds Claude to post a handoff comment
+2. Comment includes: current step, completed work, remaining steps, key decisions
 3. Next session reads state from SQLite — no transcript dependency
-
----
-
-## Notifications
-
-macOS desktop notifications (skipped silently on other platforms):
-- **Task complete** — Glass sound
-- **Attention needed** — Bottle sound
 
 ---
 
 ## Stale detection
 
-Workflows untouched for 2+ hours get a soft warning instead of blocking:
-
-```
-STALE WORKFLOW: "auth overhaul" (EXECUTING) — last activity 3h ago.
-```
+Workflows untouched for 2+ hours get a soft warning instead of blocking.
 
 ---
 
@@ -262,11 +286,11 @@ STALE WORKFLOW: "auth overhaul" (EXECUTING) — last activity 3h ago.
 
 ```
 You ←→ Claude Code
-         ├── Skills (/powr spec, /powr plan, /powr execute, /powr ship)
-         │     ├── Bash(powr-workmaxxing <command>)  — state
-         │     └── Linear MCP                        — tickets
+         ├── /powr skill (spec, plan, execute, ship, status, bypass)
+         │     ├── Bash(powr-workmaxxing <cmd>)  — state machine
+         │     └── Linear MCP                    — tickets
          └── Hooks (powr-hook.sh, 11 handlers)
-               └── sqlite3 ~/.powr/workflow.db       — <50ms queries
+               └── sqlite3 ~/.powr/workflow.db   — <50ms queries
 ```
 
 ### State machine
@@ -276,15 +300,15 @@ Feature:  SPECCING → PLANNING → REVIEWING → TICKETING → EXECUTING → SH
 Ticket:   QUEUED → INVESTIGATING → IMPLEMENTING → CODE_REVIEWING → CROSS_REFING → FIXING → VERIFYING_ACS → DONE
 ```
 
-Declarative config. Gates have Zod-typed evidence. Transitions validated — can't skip or go backwards.
+Declarative config. Zod-typed gate evidence. Can't skip or go backwards.
 
 ### SQLite (`~/.powr/workflow.db`)
 
 | Table | Purpose |
 |---|---|
-| `workflows` | Feature workflows (stage, repo, name) |
+| `workflows` | Feature workflows |
 | `ticket_workflows` | Per-ticket sub-workflows |
-| `gates` | Passed gates with evidence (JSON) |
+| `gates` | Passed gates with evidence |
 | `sessions` | Claude sessions, bypass tracking |
 | `audit_log` | Every state change |
 
@@ -299,7 +323,7 @@ WAL mode. 5s busy timeout for concurrent writers.
 | `lifecycle` | Stop | Block premature stop |
 | `review-plan` | PreToolUse ExitPlanMode | Force plan review |
 | `enforce-gates` | PreToolUse update_issue | Block Done without all gates |
-| `post-commit` | PostToolUse Bash | Trigger CodeRabbit after commit |
+| `post-commit` | PostToolUse Bash | Trigger code review after commit |
 | `post-comment` | PostToolUse create_comment | Auto-detect gates from comments |
 | `validate-ticket` | PreToolUse create_issue | Validate fields + ACs |
 | `merge-coordination` | PreToolUse Bash | Enforce rebase-before-merge |
@@ -308,9 +332,7 @@ WAL mode. 5s busy timeout for concurrent writers.
 
 ### Workflow isolation
 
-Each workflow has a UUID. Claude passes `-w <id>` internally. Multiple workflows per repo, zero overlap.
-
-Manual CLI usage: `export POWR_WF=<id>`.
+Each workflow gets a UUID. Claude passes `-w <id>` internally. Multiple workflows per repo, zero overlap.
 
 ---
 
