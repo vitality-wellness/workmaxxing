@@ -1,6 +1,10 @@
-# /ship — Final Verification and Completion
+---
+name: powr-ship
+description: Final verification and workflow completion. Checks all tickets done, runs static analysis, closes the workflow. Triggers on "/ship", "ship it", "we're done".
+allowed-tools: Bash, Read, Grep, Glob, mcp__plugin_linear_linear__list_issues
+---
 
-Trigger: user says "/ship" or "ship it", "we're done"
+# /ship — Final Verification and Completion
 
 ## Instructions
 

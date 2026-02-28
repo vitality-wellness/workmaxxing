@@ -1,6 +1,10 @@
-# /plan — Plan Creation + Review + Ticket Decomposition
+---
+name: powr-plan
+description: Create an implementation plan, review it across 5 dimensions, then decompose into Linear tickets. Use when the user wants to plan how to build a feature. Triggers on "/plan", "create a plan", "plan this out".
+allowed-tools: Bash, AskUserQuestion, Write, Read, Grep, Glob, Agent, EnterPlanMode, ExitPlanMode, mcp__plugin_linear_linear__save_issue, mcp__plugin_linear_linear__list_issues
+---
 
-Trigger: user says "/plan" or "create a plan", "plan this out"
+# /plan — Plan Creation + Review + Ticket Decomposition
 
 ## Instructions
 

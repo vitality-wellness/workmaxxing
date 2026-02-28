@@ -1,6 +1,11 @@
-# /spec — Interactive Requirements Gathering
+---
+name: powr-spec
+description: Interactive requirements gathering that produces a spec document. Use when the user wants to define what to build before planning. Triggers on "/spec", "spec out", "write a spec for".
+argument-hint: <feature description>
+allowed-tools: Bash, AskUserQuestion, Write, Read, Grep, Glob, Agent
+---
 
-Trigger: user says "/spec" or "spec out", "write a spec for"
+# /spec — Interactive Requirements Gathering
 
 ## Instructions
 

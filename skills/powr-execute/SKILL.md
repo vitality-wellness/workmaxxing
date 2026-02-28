@@ -1,6 +1,11 @@
-# /execute — Execute Tickets, Cycles, or Projects
+---
+name: powr-execute
+description: Execute tickets with quality gates. Supports single tickets, cycles, projects, or milestones. Batches run in parallel worktrees by dependency wave. Triggers on "/execute", "execute POWR-500", "execute cycle", "execute project".
+argument-hint: [POWR-500 | cycle "name" | project "name"]
+allowed-tools: Bash, Write, Edit, Read, Grep, Glob, Agent, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__save_issue, mcp__plugin_linear_linear__create_comment, Skill
+---
 
-Trigger: user says "/execute" followed by a ticket ID, cycle, project, milestone, or nothing (defaults to next unblocked ticket in current workflow)
+# /execute — Execute Tickets, Cycles, or Projects
 
 ## Resolving what to execute
 

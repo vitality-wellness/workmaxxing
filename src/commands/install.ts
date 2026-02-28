@@ -12,7 +12,7 @@ import {
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SKILLS = ["spec", "plan", "execute", "ship"] as const;
+const SKILL_DIRS = ["powr-spec", "powr-plan", "powr-execute", "powr-ship"] as const;
 const HOOK_FILENAME = "powr-hook.sh";
 
 const LEGACY_HOOKS = [
@@ -46,7 +46,7 @@ function findSourceDir(): string | null {
   for (const dir of candidates) {
     if (
       existsSync(join(dir, "hooks", HOOK_FILENAME)) &&
-      existsSync(join(dir, "skills", "spec.md"))
+      existsSync(join(dir, "skills", "powr-spec", "SKILL.md"))
     ) {
       return dir;
     }
@@ -114,13 +114,13 @@ function installInRepo(
   const repoName =
     repoPath.split("/").filter(Boolean).pop() ?? repoPath;
   const hooksDir = join(repoPath, ".claude", "hooks");
-  const skillTarget = join(repoPath, ".claude", "skills", "powr");
+  const skillsBase = join(repoPath, ".claude", "skills");
 
   console.log(`Installing in ${repoName}...`);
 
   if (!dryRun) {
     mkdirSync(hooksDir, { recursive: true });
-    mkdirSync(skillTarget, { recursive: true });
+    mkdirSync(skillsBase, { recursive: true });
   }
 
   // Move legacy hooks
@@ -148,17 +148,22 @@ function installInRepo(
   }
   console.log("  Linked powr-hook.sh");
 
-  // Symlink skills
-  for (const skill of SKILLS) {
-    const src = join(skillsDir, `${skill}.md`);
-    const dest = join(skillTarget, `${skill}.md`);
+  // Symlink skill directories
+  for (const skillDir of SKILL_DIRS) {
+    const src = join(skillsDir, skillDir);
+    const dest = join(skillsBase, skillDir);
     if (!dryRun) {
-      if (existsSync(dest)) unlinkSync(dest);
+      if (existsSync(dest)) {
+        // Remove existing (symlink or dir)
+        if (lstatSync(dest).isSymbolicLink()) {
+          unlinkSync(dest);
+        }
+      }
       symlinkSync(src, dest);
     }
   }
   console.log(
-    "  Linked skills: powr:spec, powr:plan, powr:execute, powr:ship"
+    "  Linked skills: /powr-spec, /powr-plan, /powr-execute, /powr-ship"
   );
 
   console.log("  Done.\n");
