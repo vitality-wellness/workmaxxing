@@ -23,7 +23,7 @@ powr-workmaxxing setup       # once — initializes ~/.powr/ database
 powr-workmaxxing install     # per repo — adds hooks + skills
 ```
 
-After the initial clone, `powr-workmaxxing` is globally available. `install` is safe to run on repos with existing `.claude/` — old hooks move to `_legacy/`.
+After the initial clone, `powr-workmaxxing` is globally available. `install` is safe to run on repos that already have `.claude/`.
 
 ---
 
