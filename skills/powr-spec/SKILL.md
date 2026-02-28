@@ -17,7 +17,28 @@ You are interviewing the user to understand what they want to build. Your job is
 powr-workmaxxing start "<feature-name>" --repo "$CLAUDE_PROJECT_DIR"
 ```
 
-### Step 2: Interview
+### Step 2: Check what already exists
+
+Before interviewing, search Linear for existing work:
+
+```
+mcp__plugin_linear_linear__list_issues({ query: "<feature keywords>", team: "POWR", limit: 30 })
+mcp__plugin_linear_linear__list_projects({ team: "POWR" })
+```
+
+Look for:
+- **Existing tickets** that cover the same thing (full or partial overlap)
+- **Related projects** this might belong under
+- **Previous attempts** (canceled or completed — learn from them)
+
+If you find overlap, tell the user immediately:
+- "There's POWR-342 'Add OAuth support' in MVP Launch. Are you extending that, or is this different?"
+- "POWR-201 tried this and was canceled — notes say the API wasn't ready. That's resolved now."
+- "The Activities project already has a milestone for this. Should we add to it?"
+
+Don't skip this. The user may not know what's already in Linear.
+
+### Step 3: Interview
 
 Use AskUserQuestion to have a conversation. Adapt your questions to what the user tells you — don't robotically go through a checklist. But make sure you cover:
 
@@ -30,7 +51,7 @@ Use AskUserQuestion to have a conversation. Adapt your questions to what the use
 
 Ask follow-up questions. Dig into vague answers. If the user says "make it fast," ask "fast how? Sub-100ms API response? Instant UI feedback? Both?"
 
-### Step 3: Determine scope
+### Step 4: Determine scope
 
 Based on the interview, figure out the right granularity:
 
@@ -44,7 +65,7 @@ Based on the interview, figure out the right granularity:
 Use AskUserQuestion to confirm the scope with the user:
 - "This sounds like it breaks down into 3 tickets under one parent. Does that match your expectation, or is this bigger/smaller than I'm thinking?"
 
-### Step 4: Write the spec
+### Step 5: Write the spec
 
 Save to `.claude/specs/<feature-name>.md`:
 
@@ -80,7 +101,7 @@ Save to `.claude/specs/<feature-name>.md`:
 - <anything unresolved>
 ```
 
-### Step 5: Record and advance
+### Step 6: Record and advance
 
 ```bash
 powr-workmaxxing gate record spec_document_written --evidence '{"path":".claude/specs/<name>.md"}'

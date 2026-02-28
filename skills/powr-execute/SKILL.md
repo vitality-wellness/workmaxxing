@@ -138,7 +138,14 @@ Repeat steps 4-6 for each wave until all tickets are done.
 
 ### 1. INVESTIGATING
 - Read the ticket description and ACs from Linear
+- **Check the big picture** — fetch all tickets in the project + dependency chain:
+  ```
+  mcp__plugin_linear_linear__list_issues({ project: "<project>", team: "POWR" })
+  mcp__plugin_linear_linear__get_issue({ id: "<id>", includeRelations: true })
+  ```
+  Understand: where does this ticket fit? What was just built? What's coming next? What patterns were established?
 - Explore codebase: answer 5 questions (similar features, types/interfaces, utilities, state management, constraints)
+- Include project context in the investigation comment: "This is ticket 3/7 in Auth Overhaul. POWR-500 established the provider pattern — following it."
 - Post investigation comment to the Linear ticket
 - Record: `powr-workmaxxing gate record investigation -w <wf-id> --evidence '{"commentUrl":"..."}'`
 
@@ -152,8 +159,17 @@ Repeat steps 4-6 for each wave until all tickets are done.
 - Record: `powr-workmaxxing gate record coderabbit_review -w <wf-id> --evidence '{"reviewUrl":"..."}'`
 
 ### 4. CROSS_REFING
-- List project issues in Linear
-- Classify findings: "Must Fix Now" vs "Covered by Future Tickets"
+- **Search ALL tickets** — not just current cycle or project:
+  ```
+  mcp__plugin_linear_linear__list_issues({ query: "<finding keywords>", team: "POWR", limit: 50 })
+  mcp__plugin_linear_linear__list_issues({ project: "<project>", team: "POWR" })
+  mcp__plugin_linear_linear__list_issues({ state: "backlog", team: "POWR" })
+  ```
+- For each CodeRabbit finding, check if ANY existing ticket (any project, any cycle, backlog, future) covers it
+- Classify findings:
+  - "Must Fix Now" — genuinely new issue with no existing ticket
+  - "Covered by POWR-450 (next sprint)" — existing future ticket handles it
+  - "Recurring — also found in POWR-300, POWR-350 reviews. Consider cross-cutting ticket." — pattern across reviews
 - Post cross-reference comment
 - Record: `powr-workmaxxing gate record findings_crossreferenced -w <wf-id> --evidence '{"commentUrl":"..."}'`
 
@@ -169,6 +185,11 @@ Repeat steps 4-6 for each wave until all tickets are done.
 - Record: `powr-workmaxxing gate record acceptance_criteria -w <wf-id> --evidence '{"commentUrl":"..."}'`
 
 ### 7. DONE
+- **Check what this unblocks:**
+  ```
+  mcp__plugin_linear_linear__get_issue({ id: "<id>", includeRelations: true })
+  ```
+  Note in the completion comment: "Completing this unblocks POWR-503 and POWR-504."
 - Mark ticket as Done in Linear:
   ```
   mcp__plugin_linear_linear__save_issue({ id: "<issue-id>", state: "Done" })

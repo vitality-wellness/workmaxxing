@@ -19,9 +19,22 @@ You are creating an implementation plan and decomposing it into Linear tickets.
 
 2. **Read the spec** (if exists) from `.claude/specs/`
 
-3. **Enter plan mode** (EnterPlanMode) and explore the codebase
+3. **Survey the ticket landscape** before planning:
+   ```
+   mcp__plugin_linear_linear__list_issues({ project: "<project>", team: "POWR" })
+   mcp__plugin_linear_linear__list_issues({ team: "POWR", state: "backlog" })
+   ```
+   Look for:
+   - **Upcoming tickets** touching the same code — don't plan work that conflicts
+   - **Completed tickets** that established patterns — follow them
+   - **Blocked tickets** that this work might unblock — note the dependency
+   - **Planned refactors** — don't over-build if a refactor is coming
 
-4. **Write the plan** to `.claude/plans/<feature-name>.md` with numbered steps, substeps, dependencies, and acceptance criteria
+   Shape the plan around what exists. Reference specific tickets: "Step 3 follows the pattern from POWR-400. Step 5 should be done before POWR-450 starts."
+
+4. **Enter plan mode** (EnterPlanMode) and explore the codebase
+
+5. **Write the plan** to `.claude/plans/<feature-name>.md` with numbered steps, substeps, dependencies, and acceptance criteria
 
 5. **Record gate:**
    ```bash
@@ -56,7 +69,17 @@ powr-workmaxxing advance  # REVIEWING → TICKETING
 powr-workmaxxing tickets preview .claude/plans/<name>.md --json
 ```
 
-This outputs structured JSON with ticket specs. For each spec, use the **Linear MCP** to create tickets:
+This outputs structured JSON with ticket specs. **Before creating each ticket**, check for duplicates:
+
+```
+mcp__plugin_linear_linear__list_issues({ query: "<ticket title keywords>", team: "POWR", limit: 10 })
+```
+
+- If an existing ticket covers the same scope, **link to it** instead of creating a duplicate
+- If an existing ticket covers part of the scope, ask the user: extend it or create new?
+- Only create genuinely new tickets
+
+For each new spec, use the **Linear MCP** to create tickets:
 
 ```
 mcp__plugin_linear_linear__save_issue({
