@@ -13,6 +13,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORKFLOW_DIR="$(dirname "$SCRIPT_DIR")"
 HOOK_SOURCE="$WORKFLOW_DIR/hooks/powr-hook.sh"
+SKILLS_DIR="$WORKFLOW_DIR/skills"
 
 DRY_RUN=false
 if [[ "${1:-}" == "--dry-run" ]]; then
@@ -81,15 +82,33 @@ for REPO in "${REPOS[@]}"; do
   fi
 
   # Also keep notification hooks (not migrated)
-  echo "   ✅ Keeping notif-done.sh, notif-attention.sh (not migrated)"
+  echo "   Keeping notif-done.sh, notif-attention.sh (not migrated)"
 
+  # Symlink skills
+  SKILL_TARGET="$REPO/.claude/skills/workmaxxing"
+  if [[ "$DRY_RUN" == "false" ]]; then
+    mkdir -p "$SKILL_TARGET"
+  fi
+
+  for SKILL in spec plan execute ship; do
+    if [[ -L "$SKILL_TARGET/$SKILL.md" ]]; then
+      echo "   Skill $SKILL.md already linked"
+    else
+      echo "   Symlinking skill $SKILL.md"
+      if [[ "$DRY_RUN" == "false" ]]; then
+        ln -sf "$SKILLS_DIR/$SKILL.md" "$SKILL_TARGET/$SKILL.md"
+      fi
+    fi
+  done
+
+  echo "   ✅ Done"
   echo ""
 done
 
-echo "Done! Hooks installed from $HOOK_SOURCE"
+echo "Installed in all repos:"
+echo "  - powr-hook.sh (11 handlers)"
+echo "  - 4 skills (/spec, /plan, /execute, /ship)"
 echo ""
-echo "Next steps:"
-echo "  1. Update settings.local.json in each repo to point to powr-hook.sh"
-echo "  2. Test: powr-workmaxxing status"
-echo ""
-echo "To rollback: mv .claude/hooks/_legacy/* .claude/hooks/"
+echo "Next: Update settings.local.json in each repo to point hooks to powr-hook.sh"
+echo "Test: powr-workmaxxing status"
+echo "Rollback: mv .claude/hooks/_legacy/* .claude/hooks/"
