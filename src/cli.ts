@@ -10,6 +10,7 @@ import { bypassCommand } from "./commands/bypass.js";
 import { ticketsCommand } from "./commands/tickets.js";
 import { auditCommand } from "./commands/audit.js";
 import { repoCommand } from "./commands/repo.js";
+import { installCommand } from "./commands/install.js";
 
 const program = new Command();
 
@@ -37,6 +38,9 @@ program.addCommand(ticketsCommand);
 
 // Repo lifecycle
 program.addCommand(repoCommand);
+
+// Setup
+program.addCommand(installCommand);
 
 // Observability
 program.addCommand(auditCommand);
