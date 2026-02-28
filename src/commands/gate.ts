@@ -4,6 +4,8 @@ import { GateRepo } from "../store/gate-repo.js";
 import { AuditRepo } from "../store/audit-repo.js";
 import { getWorkflowConfig } from "../engine/workflow-config.js";
 import { resolveWorkflow, requireWorkflow } from "../resolve-workflow.js";
+import { detectGatesFromComment } from "../engine/gate-detection.js";
+import { getNextDirective, getDirectiveForGate } from "../engine/directives.js";
 
 export const gateCommand = new Command("gate").description(
   "Manage workflow gates (checkpoints)"
@@ -110,6 +112,68 @@ gateCommand
       for (const gate of gateList) {
         console.log(`  ${gate.passed ? "✅" : "⬜"} ${gate.name}`);
       }
+    }
+
+    db.close();
+  });
+
+gateCommand
+  .command("detect")
+  .description("Auto-detect gates from Linear comment text")
+  .option("--text <text>", "Comment text to analyze")
+  .option("--repo <path>", "Repository path", process.cwd())
+  .option("-w, --workflow <id>", "Workflow ID (or set POWR_WF env var)")
+  .option("--json", "Output as JSON")
+  .action(
+    (opts: { text?: string; repo: string; workflow?: string; json?: boolean }) => {
+      const text = opts.text ?? "";
+      const detected = detectGatesFromComment(text);
+
+      if (opts.json) {
+        console.log(JSON.stringify(detected));
+      } else {
+        if (detected.length === 0) {
+          console.log("No gates detected in comment.");
+        } else {
+          for (const d of detected) {
+            const tag = d.confidence === "inferred" ? " (auto-passed)" : "";
+            console.log(`  ✅ ${d.gate}${tag}`);
+          }
+        }
+      }
+    }
+  );
+
+gateCommand
+  .command("next")
+  .description("Show the mandatory next action based on current gate progress")
+  .option("--repo <path>", "Repository path", process.cwd())
+  .option("-w, --workflow <id>", "Workflow ID (or set POWR_WF env var)")
+  .action((opts: { repo: string; workflow?: string }) => {
+    const db = getDb();
+    const gates = new GateRepo(db);
+
+    const workflow = resolveWorkflow(db, opts);
+    if (!workflow) {
+      db.close();
+      return;
+    }
+
+    const passedGates = gates.getPassedNames(workflow.id);
+
+    // Determine level based on stage
+    const isTicketLevel = [
+      "INVESTIGATING", "IMPLEMENTING", "CODE_REVIEWING",
+      "CROSS_REFING", "FIXING", "VERIFYING_ACS",
+    ].includes(workflow.stage);
+
+    const directive = getNextDirective(
+      passedGates,
+      isTicketLevel ? "ticket" : "feature"
+    );
+
+    if (directive) {
+      console.log(directive);
     }
 
     db.close();

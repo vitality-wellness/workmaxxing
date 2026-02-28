@@ -9,6 +9,7 @@ import { sessionCommand } from "./commands/session.js";
 import { bypassCommand } from "./commands/bypass.js";
 import { ticketsCommand } from "./commands/tickets.js";
 import { auditCommand } from "./commands/audit.js";
+import { repoCommand } from "./commands/repo.js";
 
 const program = new Command();
 
@@ -33,6 +34,9 @@ program.addCommand(sessionCommand);
 
 // Ticket management
 program.addCommand(ticketsCommand);
+
+// Repo lifecycle
+program.addCommand(repoCommand);
 
 // Observability
 program.addCommand(auditCommand);

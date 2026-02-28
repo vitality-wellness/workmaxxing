@@ -5,9 +5,10 @@ import {
   planToTicketSpecs,
   formatTicketPreview,
 } from "../integrations/ticket-creator.js";
+import { validateTicket, type TicketInput } from "../engine/ticket-validator.js";
 
 export const ticketsCommand = new Command("tickets").description(
-  "Parse plans into ticket specs for Linear MCP"
+  "Parse plans and validate tickets"
 );
 
 ticketsCommand
@@ -47,4 +48,28 @@ ticketsCommand
     } else {
       console.log(formatTicketPreview(specs));
     }
+  });
+
+ticketsCommand
+  .command("validate")
+  .description("Validate ticket fields before creation")
+  .option("--json <input>", "Ticket input as JSON string")
+  .action((opts: { json?: string }) => {
+    if (!opts.json) {
+      console.error("Error: --json <input> is required");
+      process.exit(2);
+    }
+
+    let input: TicketInput;
+    try {
+      input = JSON.parse(opts.json) as TicketInput;
+    } catch {
+      console.error("Error: Invalid JSON input");
+      process.exit(2);
+    }
+
+    const result = validateTicket(input);
+
+    console.log(JSON.stringify(result));
+    process.exit(result.valid ? 0 : 1);
   });
