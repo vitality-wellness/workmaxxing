@@ -1,9 +1,9 @@
 import { Command } from "commander";
 import { getDb } from "../store/db.js";
-import { WorkflowRepo } from "../store/workflow-repo.js";
 import { GateRepo } from "../store/gate-repo.js";
 import { AuditRepo } from "../store/audit-repo.js";
 import { getWorkflowConfig } from "../engine/workflow-config.js";
+import { resolveWorkflow, requireWorkflow } from "../resolve-workflow.js";
 
 export const gateCommand = new Command("gate").description(
   "Manage workflow gates (checkpoints)"
@@ -15,22 +15,18 @@ gateCommand
   .argument("<name>", "Gate name")
   .option("--evidence <json>", "Evidence JSON", "{}")
   .option("--repo <path>", "Repository path", process.cwd())
+  .option("-w, --workflow <id>", "Workflow ID (or set POWR_WF env var)")
   .option("--json", "Output as JSON")
   .action(
     (
       name: string,
-      opts: { evidence: string; repo: string; json?: boolean }
+      opts: { evidence: string; repo: string; workflow?: string; json?: boolean }
     ) => {
       const db = getDb();
-      const workflows = new WorkflowRepo(db);
       const gates = new GateRepo(db);
       const audit = new AuditRepo(db);
 
-      const workflow = workflows.findActiveForRepo(opts.repo);
-      if (!workflow) {
-        console.error("Error: No active workflow.");
-        process.exit(1);
-      }
+      const workflow = requireWorkflow(db, opts);
 
       let evidence: Record<string, unknown>;
       try {
@@ -67,12 +63,12 @@ gateCommand
   .description("Check if a gate is passed")
   .argument("<name>", "Gate name")
   .option("--repo <path>", "Repository path", process.cwd())
-  .action((name: string, opts: { repo: string }) => {
+  .option("-w, --workflow <id>", "Workflow ID (or set POWR_WF env var)")
+  .action((name: string, opts: { repo: string; workflow?: string }) => {
     const db = getDb();
-    const workflows = new WorkflowRepo(db);
     const gates = new GateRepo(db);
 
-    const workflow = workflows.findActiveForRepo(opts.repo);
+    const workflow = resolveWorkflow(db, opts);
     if (!workflow) {
       process.exit(1);
     }
@@ -85,17 +81,13 @@ gateCommand
   .command("list")
   .description("List all gates for current stage with status")
   .option("--repo <path>", "Repository path", process.cwd())
+  .option("-w, --workflow <id>", "Workflow ID (or set POWR_WF env var)")
   .option("--json", "Output as JSON")
-  .action((opts: { repo: string; json?: boolean }) => {
+  .action((opts: { repo: string; workflow?: string; json?: boolean }) => {
     const db = getDb();
-    const workflows = new WorkflowRepo(db);
     const gates = new GateRepo(db);
 
-    const workflow = workflows.findActiveForRepo(opts.repo);
-    if (!workflow) {
-      console.error("Error: No active workflow.");
-      process.exit(1);
-    }
+    const workflow = requireWorkflow(db, opts);
 
     const config = getWorkflowConfig();
     const stageConfig = config.stages[workflow.stage];

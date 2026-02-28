@@ -15,16 +15,7 @@ export const startCommand = new Command("start")
     const sessions = new SessionRepo(db);
     const audit = new AuditRepo(db);
 
-    // Check for existing active workflow
-    const existing = workflows.findActiveForRepo(opts.repo);
-    if (existing) {
-      console.error(
-        `Error: Active workflow already exists: "${existing.featureName}" (${existing.stage}). ` +
-          `Use \`powr-workmaxxing advance\` or \`powr-workmaxxing abandon\` first.`
-      );
-      process.exit(1);
-    }
-
+    // Multiple workflows per repo are fine — each terminal gets its own
     const workflow = workflows.create({
       featureName: name,
       repo: opts.repo,
@@ -48,6 +39,9 @@ export const startCommand = new Command("start")
       console.log(`Workflow started: "${name}"`);
       console.log(`ID:    ${workflow.id}`);
       console.log(`Stage: ${workflow.stage}`);
+      console.log();
+      console.log(`Set this in your terminal to scope all commands:`);
+      console.log(`  export POWR_WF=${workflow.id}`);
     }
 
     db.close();

@@ -82,6 +82,8 @@ export function getDb(): Database.Database {
   // Enable WAL mode for concurrent reads from hooks
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
+  // Retry for up to 5s if another process is writing (9 terminals writing concurrently)
+  db.pragma("busy_timeout = 5000");
 
   // Create tables
   db.exec(SCHEMA);

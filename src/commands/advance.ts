@@ -5,24 +5,22 @@ import { GateRepo } from "../store/gate-repo.js";
 import { AuditRepo } from "../store/audit-repo.js";
 import { getWorkflowConfig } from "../engine/workflow-config.js";
 import { validateTransition } from "../engine/state-machine.js";
+import { requireWorkflow } from "../resolve-workflow.js";
 
 export const advanceCommand = new Command("advance")
   .description(
     "Advance workflow to next stage (checks all required gates first)"
   )
   .option("--repo <path>", "Repository path", process.cwd())
+  .option("-w, --workflow <id>", "Workflow ID (or set POWR_WF env var)")
   .option("--json", "Output as JSON")
-  .action((opts: { repo: string; json?: boolean }) => {
+  .action((opts: { repo: string; workflow?: string; json?: boolean }) => {
     const db = getDb();
-    const workflows = new WorkflowRepo(db);
     const gates = new GateRepo(db);
     const audit = new AuditRepo(db);
+    const workflows = new WorkflowRepo(db);
 
-    const workflow = workflows.findActiveForRepo(opts.repo);
-    if (!workflow) {
-      console.error("Error: No active workflow. Use `powr-workmaxxing start <name>` first.");
-      process.exit(1);
-    }
+    const workflow = requireWorkflow(db, opts);
 
     const config = getWorkflowConfig();
     const stageConfig = config.stages[workflow.stage];
@@ -54,7 +52,6 @@ export const advanceCommand = new Command("advance")
       process.exit(1);
     }
 
-    // Validate transition
     const nextStage = stageConfig.nextStage;
     if (!nextStage) {
       if (opts.json) {
@@ -64,6 +61,7 @@ export const advanceCommand = new Command("advance")
       } else {
         console.log(`Workflow is in final stage: ${workflow.stage}. Nothing to advance to.`);
       }
+      db.close();
       return;
     }
 
