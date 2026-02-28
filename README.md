@@ -58,11 +58,23 @@ Claude: "Created 5 tickets. Use /execute to start."
 
 ### `/execute` — "Build it."
 
-Claude works through tickets one at a time. Each ticket goes through investigation → implementation → code review → verification. Gates enforce quality — you can't skip steps.
+Point it at whatever scope you want — a single ticket, a cycle, a project, or nothing (picks the next unblocked ticket). Claude sorts by dependencies, shows you the plan, and works through them one at a time with quality gates.
 
 ```
-You:    /execute
-Claude: [shows ticket list, starts first unblocked ticket]
+You:    /execute                          ← next unblocked ticket
+You:    /execute POWR-500                 ← one specific ticket
+You:    /execute cycle "Sprint 12"        ← every ticket in the cycle
+You:    /execute project "MVP Launch"     ← every ticket in the project
+```
+
+```
+Claude: Ready to execute 5 tickets:
+          1. POWR-500  OAuth provider setup     (High, 3pt, unblocked)
+          2. POWR-501  Token exchange            (High, 5pt, after POWR-500)
+          3. POWR-502  Refresh logic             (Normal, 3pt, after POWR-500)
+          ...
+        Start with POWR-500?
+You:    yes
 Claude: [investigates, implements, reviews, verifies ACs]
 Claude: "POWR-500 done. Starting POWR-501..."
 ```
@@ -89,7 +101,7 @@ There's only one thing to remember:
          ───────              ────────────
 Step 1   /spec                Interview → spec document
 Step 2   /plan                Plan → review → Linear tickets
-Step 3   /execute             Build each ticket with quality gates
+Step 3   /execute             Build tickets (one, a cycle, or a whole project)
 Step 4   /ship                Verify → done
 ```
 
@@ -166,7 +178,10 @@ You ←→ Claude Code ←→ powr-workmaxxing CLI (state) + Linear MCP (tickets
 |---|---|
 | Start a new feature | `/spec` |
 | Plan and create tickets | `/plan` |
-| Build the tickets | `/execute` |
+| Build one ticket | `/execute POWR-500` |
+| Build a whole cycle | `/execute cycle "Sprint 12"` |
+| Build a whole project | `/execute project "MVP"` |
+| Build next unblocked | `/execute` |
 | Finish up | `/ship` |
 | Skip the workflow | `powr-workmaxxing bypass` |
 | Check status | `powr-workmaxxing status` |
