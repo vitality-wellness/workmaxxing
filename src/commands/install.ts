@@ -12,7 +12,7 @@ import {
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SKILL_DIRS = ["powr-spec", "powr-plan", "powr-execute", "powr-ship"] as const;
+const SKILL_DIR = "powr";
 const HOOK_FILENAME = "powr-hook.sh";
 
 const LEGACY_HOOKS = [
@@ -46,7 +46,7 @@ function findSourceDir(): string | null {
   for (const dir of candidates) {
     if (
       existsSync(join(dir, "hooks", HOOK_FILENAME)) &&
-      existsSync(join(dir, "skills", "powr-spec", "SKILL.md"))
+      existsSync(join(dir, "skills", "powr", "spec", "SKILL.md"))
     ) {
       return dir;
     }
@@ -148,23 +148,18 @@ function installInRepo(
   }
   console.log("  Linked powr-hook.sh");
 
-  // Symlink skill directories
-  for (const skillDir of SKILL_DIRS) {
-    const src = join(skillsDir, skillDir);
-    const dest = join(skillsBase, skillDir);
-    if (!dryRun) {
-      if (existsSync(dest)) {
-        // Remove existing (symlink or dir)
-        if (lstatSync(dest).isSymbolicLink()) {
-          unlinkSync(dest);
-        }
+  // Symlink powr/ skill directory
+  const skillSrc = join(skillsDir, SKILL_DIR);
+  const skillDest = join(skillsBase, SKILL_DIR);
+  if (!dryRun) {
+    if (existsSync(skillDest)) {
+      if (lstatSync(skillDest).isSymbolicLink()) {
+        unlinkSync(skillDest);
       }
-      symlinkSync(src, dest);
     }
+    symlinkSync(skillSrc, skillDest);
   }
-  console.log(
-    "  Linked skills: /powr-spec, /powr-plan, /powr-execute, /powr-ship"
-  );
+  console.log("  Linked skills: powr:spec, powr:plan, powr:execute, powr:ship");
 
   console.log("  Done.\n");
 }
