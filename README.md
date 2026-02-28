@@ -10,17 +10,24 @@ That's it. Say the word, Claude handles the rest.
 
 ---
 
-## Setup (once, 2 minutes)
+## Setup
 
 ```bash
+# Install the CLI (once)
 cd ~/Dev/vitality/powr-workmaxxing
 npm install && npm run build && npm link
 
+# Add to any repo
+powr-workmaxxing install                      # current directory
+powr-workmaxxing install /path/to/some-repo   # specific repo
+powr-workmaxxing install --all                # all known repos
+
+# Verify
 powr-workmaxxing status
 # → "No active workflow."
 ```
 
-Done. Works from any repo, any terminal.
+That's it. `install` symlinks the hooks and skills (`powr:spec`, `powr:plan`, `powr:execute`, `powr:ship`) into the repo. Safe to run on repos that already have `.claude/` — existing hooks get moved to `_legacy/`, nothing is deleted.
 
 ---
 
@@ -151,6 +158,7 @@ powr-workmaxxing session cleanup  # something stuck? clean up
 | Finish up | `/ship` |
 | Skip the workflow | `powr-workmaxxing bypass` |
 | Check status | `powr-workmaxxing status` |
+| Install in a new repo | `powr-workmaxxing install /path/to/repo` |
 
 ---
 
