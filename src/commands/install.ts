@@ -30,16 +30,142 @@ const LEGACY_HOOKS = [
   "review-plan-prompt.md",
 ];
 
-/**
- * Find the powr-workmaxxing source directory.
- * Tries multiple resolution strategies.
- */
+/** The hooks config that replaces all legacy hooks */
+const POWR_HOOKS = {
+  UserPromptSubmit: [
+    {
+      hooks: [
+        {
+          type: "command",
+          command:
+            '"$CLAUDE_PROJECT_DIR"/.claude/hooks/powr-hook.sh detect-work',
+        },
+      ],
+    },
+  ],
+  PreToolUse: [
+    {
+      matcher: "Edit|Write",
+      hooks: [
+        {
+          type: "command",
+          command:
+            '"$CLAUDE_PROJECT_DIR"/.claude/hooks/powr-hook.sh require-ticket',
+        },
+      ],
+    },
+    {
+      matcher: "ExitPlanMode",
+      hooks: [
+        {
+          type: "command",
+          command:
+            '"$CLAUDE_PROJECT_DIR"/.claude/hooks/powr-hook.sh review-plan',
+        },
+      ],
+    },
+    {
+      matcher: "mcp__plugin_linear_linear__update_issue",
+      hooks: [
+        {
+          type: "command",
+          command:
+            '"$CLAUDE_PROJECT_DIR"/.claude/hooks/powr-hook.sh enforce-gates',
+        },
+      ],
+    },
+    {
+      matcher:
+        "mcp__plugin_linear_linear__create_issue|mcp__plugin_linear_linear__update_issue",
+      hooks: [
+        {
+          type: "command",
+          command:
+            '"$CLAUDE_PROJECT_DIR"/.claude/hooks/powr-hook.sh validate-ticket',
+        },
+      ],
+    },
+    {
+      matcher: "Bash",
+      hooks: [
+        {
+          type: "command",
+          command:
+            '"$CLAUDE_PROJECT_DIR"/.claude/hooks/powr-hook.sh merge-coordination',
+        },
+      ],
+    },
+  ],
+  PostToolUse: [
+    {
+      matcher: "Bash",
+      hooks: [
+        {
+          type: "command",
+          command:
+            '"$CLAUDE_PROJECT_DIR"/.claude/hooks/powr-hook.sh post-commit',
+        },
+      ],
+    },
+    {
+      matcher: "mcp__plugin_linear_linear__create_comment",
+      hooks: [
+        {
+          type: "command",
+          command:
+            '"$CLAUDE_PROJECT_DIR"/.claude/hooks/powr-hook.sh post-comment',
+        },
+      ],
+    },
+  ],
+  Stop: [
+    {
+      hooks: [
+        {
+          type: "command",
+          command:
+            '"$CLAUDE_PROJECT_DIR"/.claude/hooks/powr-hook.sh notification stop',
+        },
+      ],
+    },
+    {
+      hooks: [
+        {
+          type: "command",
+          command:
+            '"$CLAUDE_PROJECT_DIR"/.claude/hooks/powr-hook.sh lifecycle',
+        },
+      ],
+    },
+  ],
+  Notification: [
+    {
+      hooks: [
+        {
+          type: "command",
+          command:
+            '"$CLAUDE_PROJECT_DIR"/.claude/hooks/powr-hook.sh notification attention',
+        },
+      ],
+    },
+  ],
+  PreCompact: [
+    {
+      hooks: [
+        {
+          type: "command",
+          command:
+            '"$CLAUDE_PROJECT_DIR"/.claude/hooks/powr-hook.sh context-handoff',
+        },
+      ],
+    },
+  ],
+};
+
 function findSourceDir(): string | null {
   const candidates = [
-    // npm link: follow the symlink from the bin entry
     resolve(dirname(fileURLToPath(import.meta.url)), ".."),
     resolve(dirname(fileURLToPath(import.meta.url)), "..", ".."),
-    // Common dev locations
     resolve(process.env["HOME"] ?? "", "Dev", "vitality", "powr-workmaxxing"),
   ];
 
@@ -101,7 +227,7 @@ export const installCommand = new Command("install")
         installInRepo(target, hookSource, skillsDir, opts.dryRun ?? false);
       }
 
-      console.log("Test: powr-workmaxxing status");
+      console.log("Done. Restart Claude Code to pick up the new skill.");
     }
   );
 
@@ -123,7 +249,7 @@ function installInRepo(
     mkdirSync(skillsBase, { recursive: true });
   }
 
-  // Move legacy hooks
+  // Move legacy hook files
   let legacyCount = 0;
   for (const hook of LEGACY_HOOKS) {
     const hookPath = join(hooksDir, hook);
@@ -137,7 +263,7 @@ function installInRepo(
     }
   }
   if (legacyCount > 0) {
-    console.log(`  Moved ${legacyCount} legacy hooks → _legacy/`);
+    console.log(`  Moved ${legacyCount} legacy hook files → _legacy/`);
   }
 
   // Symlink hook runner
@@ -159,7 +285,35 @@ function installInRepo(
       symlinkSync(skillSrc, skillDest);
     }
   }
-  console.log("  Linked skill: /powr (spec, plan, execute, ship)");
+  console.log("  Linked skill: /powr");
 
-  console.log("  Done.\n");
+  // Update settings.local.json — replace hooks section
+  updateSettings(repoPath, dryRun);
+
+  console.log("");
+}
+
+function updateSettings(repoPath: string, dryRun: boolean): void {
+  const settingsPath = join(repoPath, ".claude", "settings.local.json");
+
+  let settings: Record<string, unknown> = {};
+
+  if (existsSync(settingsPath)) {
+    try {
+      settings = JSON.parse(readFileSync(settingsPath, "utf-8")) as Record<
+        string,
+        unknown
+      >;
+    } catch {
+      console.log("  Warning: Could not parse settings.local.json, creating fresh hooks section");
+    }
+  }
+
+  // Replace the hooks section entirely
+  settings["hooks"] = POWR_HOOKS;
+
+  if (!dryRun) {
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+  }
+  console.log("  Updated settings.local.json (hooks → powr-hook.sh)");
 }
