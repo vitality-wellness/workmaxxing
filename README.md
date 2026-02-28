@@ -13,12 +13,17 @@ That's it. Say the word, Claude handles the rest.
 ## Setup
 
 ```bash
-powr-workmaxxing setup       # once — initializes ~/.powr/
+# First time — clone and install the CLI
+git clone <repo-url> ~/.powr/src
+cd ~/.powr/src && npm install && npm run build && npm link
+
+# Add to any repo
 cd ~/my-project
+powr-workmaxxing setup       # once — initializes ~/.powr/ database
 powr-workmaxxing install     # per repo — adds hooks + skills
 ```
 
-If the repo already has `.claude/`, existing hooks move to `_legacy/`. Nothing is deleted.
+After the initial clone, `powr-workmaxxing` is globally available. `install` is safe to run on repos with existing `.claude/` — old hooks move to `_legacy/`.
 
 ---
 
