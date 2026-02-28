@@ -4,6 +4,7 @@ import { WorkflowRepo } from "../store/workflow-repo.js";
 import { GateRepo } from "../store/gate-repo.js";
 import { AuditRepo } from "../store/audit-repo.js";
 import { getWorkflowConfig } from "../engine/workflow-config.js";
+import { validateTransition } from "../engine/state-machine.js";
 
 export const advanceCommand = new Command("advance")
   .description(
@@ -53,7 +54,7 @@ export const advanceCommand = new Command("advance")
       process.exit(1);
     }
 
-    // Find next stage
+    // Validate transition
     const nextStage = stageConfig.nextStage;
     if (!nextStage) {
       if (opts.json) {
@@ -64,6 +65,12 @@ export const advanceCommand = new Command("advance")
         console.log(`Workflow is in final stage: ${workflow.stage}. Nothing to advance to.`);
       }
       return;
+    }
+
+    const transition = validateTransition(config.stages, workflow.stage, nextStage);
+    if (!transition.valid) {
+      console.error(`Error: ${transition.error}`);
+      process.exit(2);
     }
 
     const previousStage = workflow.stage;
