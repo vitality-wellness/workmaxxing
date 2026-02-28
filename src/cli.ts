@@ -7,6 +7,7 @@ import { advanceCommand } from "./commands/advance.js";
 import { gateCommand } from "./commands/gate.js";
 import { sessionCommand } from "./commands/session.js";
 import { bypassCommand } from "./commands/bypass.js";
+import { ticketsCommand } from "./commands/tickets.js";
 
 const program = new Command();
 
@@ -28,5 +29,8 @@ program.addCommand(gateCommand);
 
 // Session management
 program.addCommand(sessionCommand);
+
+// Ticket management
+program.addCommand(ticketsCommand);
 
 program.parse();
