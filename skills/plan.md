@@ -49,12 +49,28 @@ powr-workflow gate record review_architecture --evidence '{"approved":true}'
 After all reviews pass:
 ```bash
 powr-workflow advance  # REVIEWING → TICKETING
-powr-workflow tickets preview .claude/plans/<name>.md
+powr-workflow tickets preview .claude/plans/<name>.md --json
 ```
 
-Show the preview to the user. After approval:
+This outputs structured JSON with ticket specs. For each spec, use the **Linear MCP** to create tickets:
+
+```
+mcp__plugin_linear_linear__save_issue({
+  title: spec.title,
+  description: spec.description,
+  team: "POWR",
+  project: "<project-name>",
+  priority: spec.priority,
+  estimate: spec.estimate,
+  labels: spec.labels
+})
+```
+
+For sub-tickets, set `parentId` to the parent issue ID. For dependencies, set `blockedBy` using the created issue identifiers.
+
+After all tickets created:
 ```bash
-powr-workflow tickets create-from-plan .claude/plans/<name>.md --team <TEAM_ID> --project <PROJECT_ID>
+powr-workflow gate record tickets_created --evidence '{"ticketIds":["POWR-XXX","POWR-YYY"]}'
 powr-workflow advance  # TICKETING → EXECUTING
 ```
 
