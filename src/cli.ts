@@ -11,6 +11,7 @@ import { ticketsCommand } from "./commands/tickets.js";
 import { auditCommand } from "./commands/audit.js";
 import { repoCommand } from "./commands/repo.js";
 import { installCommand } from "./commands/install.js";
+import { setupCommand } from "./commands/setup.js";
 
 const program = new Command();
 
@@ -40,6 +41,7 @@ program.addCommand(ticketsCommand);
 program.addCommand(repoCommand);
 
 // Setup
+program.addCommand(setupCommand);
 program.addCommand(installCommand);
 
 // Observability

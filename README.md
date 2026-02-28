@@ -13,21 +13,24 @@ That's it. Say the word, Claude handles the rest.
 ## Setup
 
 ```bash
-# Install the CLI (once)
-cd ~/Dev/vitality/powr-workmaxxing
-npm install && npm run build && npm link
+# Install (once, from anywhere)
+npx powr-workmaxxing setup
 
-# Add to any repo
-powr-workmaxxing install                      # current directory
-powr-workmaxxing install /path/to/some-repo   # specific repo
-powr-workmaxxing install --all                # all known repos
-
-# Verify
-powr-workmaxxing status
-# → "No active workflow."
+# Add to your repo (run from inside the repo)
+cd ~/my-project
+npx powr-workmaxxing install
 ```
 
-That's it. `install` symlinks the hooks and skills (`powr:spec`, `powr:plan`, `powr:execute`, `powr:ship`) into the repo. Safe to run on repos that already have `.claude/` — existing hooks get moved to `_legacy/`, nothing is deleted.
+That's it. Two commands. Works on any repo with or without an existing `.claude/` directory — existing hooks get moved to `_legacy/`, nothing is deleted.
+
+### What `setup` does
+1. Installs the CLI globally
+2. Creates `~/.powr/` (SQLite database, repo config)
+
+### What `install` does
+1. Creates `.claude/hooks/` and `.claude/skills/powr/` in your repo
+2. Symlinks the hook runner (single file, 11 handlers)
+3. Symlinks 4 skills: `powr:spec`, `powr:plan`, `powr:execute`, `powr:ship`
 
 ---
 
