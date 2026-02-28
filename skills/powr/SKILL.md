@@ -143,22 +143,50 @@ Create an implementation plan, review it, then decompose into Linear tickets.
 
 ### Phase 2: Interactive Review
 
-Before ExitPlanMode, review the plan across 5 sections. For each:
-- NUMBER issues (1, 2, 3...)
-- Give LETTERS for options (A, B, C) with recommended first
-- Use AskUserQuestion
+**CRITICAL: You MUST actually review the plan with the user. Do NOT self-approve. Do NOT batch-record all gates. Each section requires a real conversation.**
 
-**Sections:**
-1. Architecture — component boundaries, coupling, data flow, security
-2. Code Quality — DRY violations, error handling, edge cases
-3. Tests — coverage gaps, assertion quality, failure modes
-4. Performance — N+1 queries, memory, caching, complexity
-5. Ticket Decomposition — clean boundaries, dependency ordering, AC clarity
+Go through 5 sections, one at a time. For each section:
+1. Analyze the plan for issues in that area
+2. Present findings with numbered issues and lettered options (recommended first)
+3. Use AskUserQuestion to get the user's choice
+4. Only after the user approves that section, record the gate
 
-Record each gate after approval:
-```bash
-powr-workmaxxing gate record review_architecture --evidence '{"approved":true}'
-```
+**Section 1: Architecture**
+- Component boundaries, coupling, data flow, security
+- Present issues → user picks options → then record:
+  ```bash
+  powr-workmaxxing gate record review_architecture --evidence '{"approved":true}'
+  ```
+
+**Section 2: Code Quality**
+- DRY violations, error handling, edge cases, over/under-engineering
+- Present issues → user picks → then record:
+  ```bash
+  powr-workmaxxing gate record review_code_quality --evidence '{"approved":true}'
+  ```
+
+**Section 3: Tests**
+- Coverage gaps, assertion quality, failure modes
+- Present issues → user picks → then record:
+  ```bash
+  powr-workmaxxing gate record review_tests --evidence '{"approved":true}'
+  ```
+
+**Section 4: Performance**
+- N+1 queries, memory, caching, complexity
+- Present issues → user picks → then record:
+  ```bash
+  powr-workmaxxing gate record review_performance --evidence '{"approved":true}'
+  ```
+
+**Section 5: Ticket Decomposition**
+- Clean boundaries, dependency ordering, AC clarity, scope
+- Present issues → user picks → then record:
+  ```bash
+  powr-workmaxxing gate record review_ticket_decomposition --evidence '{"approved":true}'
+  ```
+
+**If a section has no issues:** still present it to the user — "Section 3 (Tests): No issues found. The plan includes tests for X, Y, Z. Approve?" Then record after they confirm.
 
 ### Phase 3: Ticket Creation
 
