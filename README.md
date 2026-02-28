@@ -13,24 +13,12 @@ That's it. Say the word, Claude handles the rest.
 ## Setup
 
 ```bash
-# Install (once, from anywhere)
-npx powr-workmaxxing setup
-
-# Add to your repo (run from inside the repo)
+powr-workmaxxing setup       # once — initializes ~/.powr/
 cd ~/my-project
-npx powr-workmaxxing install
+powr-workmaxxing install     # per repo — adds hooks + skills
 ```
 
-That's it. Two commands. Works on any repo with or without an existing `.claude/` directory — existing hooks get moved to `_legacy/`, nothing is deleted.
-
-### What `setup` does
-1. Installs the CLI globally
-2. Creates `~/.powr/` (SQLite database, repo config)
-
-### What `install` does
-1. Creates `.claude/hooks/` and `.claude/skills/powr/` in your repo
-2. Symlinks the hook runner (single file, 11 handlers)
-3. Symlinks 4 skills: `powr:spec`, `powr:plan`, `powr:execute`, `powr:ship`
+If the repo already has `.claude/`, existing hooks move to `_legacy/`. Nothing is deleted.
 
 ---
 
