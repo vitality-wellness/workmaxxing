@@ -99,31 +99,17 @@ You never need to remember gate names, stage names, or CLI flags. Claude knows t
 
 ## Parallel terminals
 
-Open as many terminals as you want. Each one gets its own isolated workflow.
+Open 9 terminals. Run `/spec` in each one. They don't interfere.
 
-```bash
-# Terminal 1
-powr-workmaxxing start "auth overhaul"
-# → Workflow started: "auth overhaul"
-# → ID: abc-123
-# →
-# → Set this in your terminal to scope all commands:
-# →   export POWR_WF=abc-123
+Each `/spec` creates an isolated workflow with its own ID. Claude tracks the ID internally and passes it to every command — you never see it, copy it, or think about it.
 
-# Terminal 2
-powr-workmaxxing start "weight trends"
-# → export POWR_WF=def-456
-
-# Terminal 3
-powr-workmaxxing start "meal planning"
-# → export POWR_WF=ghi-789
+```
+Terminal 1:  /spec auth overhaul       → Claude works on auth
+Terminal 2:  /spec weight trends       → Claude works on weight, unaware of Terminal 1
+Terminal 3:  /spec meal planning       → same deal
 ```
 
-Each terminal only sees its own workflow. Terminal 1 can advance to PLANNING while terminals 2 and 3 are still in SPECCING. No overlap, no conflicts, no shared state.
-
-**How isolation works:** `POWR_WF` is an env var scoped to your shell session. Every command reads it to know which workflow to operate on. Different terminal = different `POWR_WF` = different workflow.
-
-You can also pass it explicitly: `powr-workmaxxing status -w abc-123`
+No shared state, no conflicts. Terminal 1 can be in `/execute` while Terminal 3 is still in `/spec`.
 
 ---
 
@@ -170,7 +156,7 @@ You ←→ Claude Code ←→ powr-workmaxxing CLI (state) + Linear MCP (tickets
             Skills orchestrate both
 ```
 
-**Workflow isolation.** Each `start` creates a new workflow with a UUID. The `POWR_WF` env var scopes all commands to that UUID. Multiple workflows can exist for the same repo simultaneously — they never touch each other's state.
+**Workflow isolation.** Each `start` creates a workflow with a UUID. Claude passes `-w <id>` to every command so multiple workflows in the same repo never touch each other's state. If you're running CLI commands manually (outside of Claude), set `export POWR_WF=<id>` to scope your terminal.
 
 ---
 
@@ -187,4 +173,3 @@ You ←→ Claude Code ←→ powr-workmaxxing CLI (state) + Linear MCP (tickets
 | View audit trail | `powr-workmaxxing audit log` |
 | Clean up stale state | `powr-workmaxxing session cleanup` |
 | Preview tickets from a plan | `powr-workmaxxing tickets preview plan.md` |
-| Scope to a specific workflow | `export POWR_WF=<id>` or `-w <id>` |
