@@ -61,6 +61,15 @@ is_bypassed() {
   [[ -n "$BYPASSED" ]]
 }
 
+set_terminal_title() {
+  # Set terminal tab title via ANSI escape sequence (writes to /dev/tty to bypass stdout capture)
+  printf '\033]0;%s\007' "$1" > /dev/tty 2>/dev/null || true
+}
+
+reset_terminal_title() {
+  printf '\033]0;\007' > /dev/tty 2>/dev/null || true
+}
+
 get_production_paths() {
   # Read production paths from repos.json
   if [[ -f "$REPOS_CONFIG" ]] && command -v jq &>/dev/null; then
@@ -155,6 +164,18 @@ handle_detect_work() {
       local NEXT_DIRECTIVE
       NEXT_DIRECTIVE=$(powr-workmaxxing gate next --repo "$PROJECT_DIR" 2>/dev/null || echo "")
 
+      # Keep terminal tab title in sync with current ticket/workflow
+      local WF_ID CURRENT_TICKET
+      WF_ID=$(echo "$STATUS" | jq -r '.workflow.id // empty' 2>/dev/null || echo "")
+      if [[ -n "$WF_ID" ]]; then
+        CURRENT_TICKET=$(query "SELECT ticket_id FROM ticket_workflows WHERE workflow_id='$WF_ID' AND stage NOT IN ('DONE','QUEUED') ORDER BY updated_at DESC LIMIT 1")
+      fi
+      if [[ -n "${CURRENT_TICKET:-}" ]]; then
+        set_terminal_title "$CURRENT_TICKET"
+      else
+        set_terminal_title "$FEATURE"
+      fi
+
       echo "ACTIVE WORKFLOW: \"$FEATURE\" | Stage: $STAGE${NEXT_DIRECTIVE:+ | Next: $NEXT_DIRECTIVE}"
     fi
   else
@@ -164,6 +185,15 @@ handle_detect_work() {
     FEATURE=$(query "SELECT feature_name FROM workflows WHERE active=1 AND repo='$PROJECT_DIR' ORDER BY updated_at DESC LIMIT 1")
 
     if [[ -n "$STAGE" ]]; then
+      # Set terminal title from fallback path
+      local CURRENT_TICKET
+      CURRENT_TICKET=$(query "SELECT ticket_id FROM ticket_workflows tw JOIN workflows w ON tw.workflow_id=w.id WHERE w.active=1 AND w.repo='$PROJECT_DIR' AND tw.stage NOT IN ('DONE','QUEUED') LIMIT 1")
+      if [[ -n "$CURRENT_TICKET" ]]; then
+        set_terminal_title "$CURRENT_TICKET"
+      elif [[ -n "$FEATURE" ]]; then
+        set_terminal_title "$FEATURE"
+      fi
+
       echo "ACTIVE WORKFLOW: \"$FEATURE\" | Stage: $STAGE"
     fi
   fi
@@ -283,6 +313,9 @@ handle_auto_record_status() {
       --repo "$PROJECT_DIR" \
       --evidence "{\"linearIssueId\":\"$TICKET_ID\"}" 2>/dev/null && \
       echo "Auto-recorded: ticket_in_progress for $TICKET_ID" || true
+
+    # Rename terminal tab to the ticket being worked on
+    set_terminal_title "$TICKET_ID"
   fi
 }
 
@@ -446,6 +479,7 @@ handle_notification() {
   local EVENT_TYPE="${2:-stop}"
 
   if [[ "$EVENT_TYPE" == "stop" ]]; then
+    reset_terminal_title
     osascript -e 'display notification "Task complete" with title "powr-workmaxxing" sound name "Glass"' 2>/dev/null || true
   else
     local MESSAGE
