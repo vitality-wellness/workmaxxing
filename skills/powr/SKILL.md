@@ -27,7 +27,8 @@ Parse the user's subcommand and follow the corresponding section below.
 Every AskUserQuestion in this workflow **requires a real, non-empty user response**. If a response comes back empty, blank, or with no selections made:
 - **Do NOT proceed** as if the user approved or answered.
 - **Do NOT infer** what the user would have said.
-- Re-ask the question. If it fails again, stop and tell the user: "I can't proceed without your input on this. Please respond to the question above."
+- **Do NOT retry AskUserQuestion** — it will fail again (likely bypass permissions is on).
+- Instead, **immediately ask the same question in plain chat text** so the user can respond normally.
 
 This applies to all phases: spec interviews, review approvals, scope decisions, and ticket creation.
 
