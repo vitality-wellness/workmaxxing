@@ -8,6 +8,18 @@ Your dev workflow in 4 words.
 
 That's it. Say the word, Claude handles the rest.
 
+## Why this exists
+
+AI coding agents are fast but sloppy. Left unchecked, Claude will skip investigation, write code without understanding context, commit without review, and mark tickets done with half the acceptance criteria unverified. Telling it "please be thorough" in a system prompt doesn't work — it agrees, then cuts corners anyway. And you shouldn't have to paste the same 20-line prompt every session reminding it to investigate before coding, run code review after committing, and cross-reference findings with existing tickets.
+
+workmaxxing fixes this with **gates** — hard checkpoints that mechanically block progress until real work is done. Not instructions. Not suggestions. Actual PreToolUse hooks that deny tool calls if gates aren't passed. Claude can't mark a ticket Done without passing all 7 gates. It can't edit production code without investigating first. It can't skip code review. The enforcement lives in hooks and SQLite, not in prose.
+
+## Why Linear
+
+Linear gives Claude context beyond the current session. Instead of starting cold every time — reading files, guessing at project structure, not knowing what was already built — it can check the ticket graph. What's done, what's in progress, what's planned, what was tried and canceled. That context helps it avoid duplicate work, understand where a feature fits, and make more informed decisions when planning and architecting.
+
+It also gives you a paper trail. Every investigation, code review, and verification gets posted as a Linear comment tied to a real ticket. When something goes wrong or you want to understand what Claude actually did, it's all there — not buried in a chat transcript you already closed.
+
 ---
 
 ## Prerequisites
