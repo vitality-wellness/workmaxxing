@@ -103,7 +103,7 @@ You:    /powr execute cycle "Sprint 12"        ← all tickets in a cycle
 You:    /powr execute project "MVP Launch"     ← all tickets in a project
 ```
 
-**Single ticket:** Claude reads the ticket, figures out where it fits in the project, investigates the codebase, implements, commits, runs code review, cross-references findings against ALL existing tickets (every project, backlog, future — not just current cycle), fixes issues, verifies acceptance criteria, notes what it unblocks, and marks it done. Six quality gates — it can't skip any of them.
+**Single ticket:** Claude sets the ticket to In Progress (auto-records the `ticket_in_progress` gate), investigates the codebase, implements, commits (auto-records `code_committed` with the real SHA), runs code review, cross-references findings against ALL existing tickets (every project, backlog, future — not just current cycle), fixes issues, verifies acceptance criteria, notes what it unblocks, and marks it done. Seven quality gates per ticket — it can't skip any of them.
 
 **Batch:** Claude builds a dependency graph, groups independent tickets into waves, and runs each wave in parallel worktrees. It shows you the plan:
 
@@ -130,7 +130,7 @@ You approve. It launches. Wave 1 finishes, merges to main, wave 2 starts. You ap
 You:    /powr ship
 ```
 
-Claude verifies **every ticket passed through all 6 gates** — investigation, code committed, code review, cross-reference, fix findings, verify ACs. If any ticket skipped a gate or isn't in DONE, it stops and tells you what's missing. Nothing ships until everything checks out.
+Claude verifies **every ticket passed through all 7 gates** — ticket in progress, investigation, code committed, code review, cross-reference, fix findings, verify ACs. If any ticket skipped a gate or isn't in DONE, it stops and tells you what's missing. Nothing ships until everything checks out.
 
 Then it audits the ticket landscape — orphaned tickets, open sub-issues, in-progress work that should have been completed, planned vs actually built. It runs static analysis, verifies everything is committed, and gives you a summary.
 
@@ -184,12 +184,13 @@ You also need hooks in `.claude/settings.local.json`:
     "PreToolUse": [
       { "matcher": "Edit|Write", "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/powr-hook.sh require-ticket" }] },
       { "matcher": "ExitPlanMode", "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/powr-hook.sh review-plan" }] },
-      { "matcher": "mcp__plugin_linear_linear__update_issue", "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/powr-hook.sh enforce-gates" }] },
-      { "matcher": "mcp__plugin_linear_linear__create_issue|mcp__plugin_linear_linear__update_issue", "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/powr-hook.sh validate-ticket" }] },
+      { "matcher": "mcp__plugin_linear_linear__save_issue", "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/powr-hook.sh enforce-gates" }] },
+      { "matcher": "mcp__plugin_linear_linear__save_issue", "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/powr-hook.sh validate-ticket" }] },
       { "matcher": "Bash", "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/powr-hook.sh merge-coordination" }] }
     ],
     "PostToolUse": [
       { "matcher": "Bash", "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/powr-hook.sh post-commit" }] },
+      { "matcher": "mcp__plugin_linear_linear__save_issue", "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/powr-hook.sh auto-record-status" }] },
       { "matcher": "mcp__plugin_linear_linear__create_comment", "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/powr-hook.sh post-comment" }] }
     ],
     "Stop": [
@@ -210,20 +211,23 @@ You also need hooks in `.claude/settings.local.json`:
 
 ## Quality gates
 
-Every ticket goes through 6 mandatory gates:
+Every ticket goes through 7 mandatory gates, scoped per-ticket:
 
 ```
-INVESTIGATE → IMPLEMENT → CODE REVIEW → CROSS-REF → FIX → VERIFY ACs → DONE
+IN PROGRESS → INVESTIGATE → IMPLEMENT → CODE REVIEW → CROSS-REF → FIX → VERIFY ACs → DONE
 ```
 
 | Gate | What happens | Enforced by |
 |---|---|---|
+| **Ticket in progress** | Set ticket to In Progress in Linear | **Auto-records** via `auto-record-status` hook |
 | **Investigation** | Explore codebase, post findings | Edit/Write blocked on production files until posted |
-| **Code committed** | Implement + commit | CodeRabbit auto-triggered after every commit |
+| **Code committed** | Implement + commit | **Auto-records** via `post-commit` hook with real SHA |
 | **Code review** | CodeRabbit review (or Claude self-review if CodeRabbit not installed) | Post-commit hook repeats until satisfied |
-| **Cross-reference** | Classify findings vs ALL existing tickets | Comment auto-records gate |
+| **Cross-reference** | Classify findings vs ALL existing tickets | Comment auto-records gate (ticket-scoped) |
 | **Fix findings** | Address "Must Fix Now" items | Auto-passes if none exist |
 | **Acceptance criteria** | Verify each AC | Auto-passes if no explicit ACs |
+
+Gates are **ticket-scoped** — ticket A's gates don't satisfy ticket B's Done check. Evidence is validated: spec/plan gates require real file paths, `code_committed` requires a valid commit SHA, `all_tickets_done` checks that every ticket_workflow is in DONE.
 
 ### Code review fallback
 
@@ -333,7 +337,7 @@ You ←→ Claude Code
          ├── /powr skill (spec, plan, execute, ship, status, bypass)
          │     ├── Bash(powr-workmaxxing <cmd>)  — state machine
          │     └── Linear MCP                    — tickets
-         └── Hooks (powr-hook.sh, 11 handlers)
+         └── Hooks (powr-hook.sh, 12 handlers)
                └── sqlite3 ~/.powr/workflow.db   — <50ms queries
 ```
 
@@ -366,10 +370,11 @@ WAL mode. 5s busy timeout for concurrent writers.
 | `detect-work` | UserPromptSubmit | Inject status + next directive |
 | `lifecycle` | Stop | Block premature stop |
 | `review-plan` | PreToolUse ExitPlanMode | Force plan review |
-| `enforce-gates` | PreToolUse update_issue | Block Done without all gates |
-| `post-commit` | PostToolUse Bash | Trigger code review after commit |
-| `post-comment` | PostToolUse create_comment | Auto-detect gates from comments |
-| `validate-ticket` | PreToolUse create_issue | Validate fields + ACs |
+| `enforce-gates` | PreToolUse save_issue | Block Done without all ticket-scoped gates |
+| `auto-record-status` | PostToolUse save_issue | Auto-record `ticket_in_progress` on In Progress |
+| `post-commit` | PostToolUse Bash | Auto-record `code_committed` with SHA + trigger code review |
+| `post-comment` | PostToolUse create_comment | Auto-detect gates from comments (ticket-scoped) |
+| `validate-ticket` | PreToolUse save_issue | Validate fields + ACs |
 | `merge-coordination` | PreToolUse Bash | Enforce rebase-before-merge |
 | `context-handoff` | PreCompact | Remind to post handoff |
 | `notification` | Stop/Notification | macOS notifications |
@@ -393,7 +398,7 @@ powr-workmaxxing
   advance [-w <id>]                   Advance stage (gate-checked)
   bypass                              Skip enforcement
 
-  gate record <name> [--evidence]     Record a gate
+  gate record <name> [--ticket] [--evidence]  Record a gate (ticket-scoped)
   gate check <name>                   Check gate (exit code)
   gate list [--json]                  Gates for current stage
   gate detect --text "..."            Auto-detect from comment
