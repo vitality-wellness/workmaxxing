@@ -96,5 +96,13 @@ export const advanceCommand = new Command("advance")
       console.log("Do not call any more tools. Do not start working on tickets.");
     }
 
+    // After EXECUTING → SHIPPING, print stop directive so Claude halts
+    if (previousStage === "EXECUTING" && nextStage === "SHIPPING") {
+      console.log();
+      console.log("STOP. Execution complete. Do NOT proceed to ship automatically.");
+      console.log('Tell the user: "All tickets executed. Type `/powr ship` to verify and ship."');
+      console.log("Do not call any more tools. The user must explicitly invoke /powr ship.");
+    }
+
     db.close();
   });

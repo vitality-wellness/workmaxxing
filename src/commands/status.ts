@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { getDb } from "../store/db.js";
 import { SessionRepo } from "../store/session-repo.js";
 import { GateRepo } from "../store/gate-repo.js";
+import { TicketWorkflowRepo } from "../store/ticket-workflow-repo.js";
 import { resolveWorkflow } from "../resolve-workflow.js";
 
 export const statusCommand = new Command("status")
@@ -13,6 +14,7 @@ export const statusCommand = new Command("status")
     const db = getDb();
     const sessions = new SessionRepo(db);
     const gates = new GateRepo(db);
+    const ticketWorkflows = new TicketWorkflowRepo(db);
 
     const active = resolveWorkflow(db, opts);
 
@@ -30,12 +32,26 @@ export const statusCommand = new Command("status")
     const session = sessions.findActiveForRepo(opts.repo);
 
     if (opts.json) {
+      // Include per-ticket gate data when ticket workflows exist
+      const twList = ticketWorkflows.listForWorkflow(active.id);
+      const ticketWorkflowData = twList.map((tw) => {
+        const passedNames = gates.getPassedNamesForTicket(active.id, tw.id);
+        return {
+          ticketId: tw.ticketId,
+          stage: tw.stage,
+          gates: Array.from(passedNames),
+        };
+      });
+
       console.log(
         JSON.stringify({
           status: "active",
           workflow: active,
           gates: currentGates,
           session,
+          ...(ticketWorkflowData.length > 0
+            ? { ticketWorkflows: ticketWorkflowData }
+            : {}),
         })
       );
     } else {

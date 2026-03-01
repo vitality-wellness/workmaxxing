@@ -184,18 +184,136 @@ gateCommand
   .argument("<name>", "Gate name")
   .option("--repo <path>", "Repository path", process.cwd())
   .option("-w, --workflow <id>", "Workflow ID (or set POWR_WF env var)")
-  .action((name: string, opts: { repo: string; workflow?: string }) => {
-    const db = getDb();
-    const gates = new GateRepo(db);
+  .option("-t, --ticket <id>", "Ticket ID — check gate for a specific ticket")
+  .option("--json", "Output as JSON")
+  .action(
+    (
+      name: string,
+      opts: { repo: string; workflow?: string; ticket?: string; json?: boolean }
+    ) => {
+      const db = getDb();
+      const gates = new GateRepo(db);
+      const ticketWorkflows = new TicketWorkflowRepo(db);
 
-    const workflow = resolveWorkflow(db, opts);
-    if (!workflow) {
-      process.exit(1);
+      const workflow = resolveWorkflow(db, opts);
+      if (!workflow) {
+        if (opts.json) {
+          console.log(JSON.stringify({ passed: false, error: "no workflow" }));
+        }
+        process.exit(1);
+      }
+
+      let passed: boolean;
+
+      if (opts.ticket) {
+        const tw = ticketWorkflows.findByTicketId(workflow.id, opts.ticket);
+        if (!tw) {
+          if (opts.json) {
+            console.log(
+              JSON.stringify({
+                passed: false,
+                error: `no ticket workflow for ${opts.ticket}`,
+              })
+            );
+          } else {
+            console.error(`No ticket workflow found for ${opts.ticket}`);
+          }
+          process.exit(1);
+        }
+        passed = gates.isPassedForTicket(workflow.id, tw.id, name);
+      } else {
+        passed = gates.isPassed(workflow.id, name);
+      }
+
+      if (opts.json) {
+        console.log(
+          JSON.stringify({
+            gate: name,
+            passed,
+            ticket: opts.ticket ?? null,
+          })
+        );
+      }
+
+      db.close();
+      process.exit(passed ? 0 : 1);
     }
+  );
 
-    const passed = gates.isPassed(workflow.id, name);
-    process.exit(passed ? 0 : 1);
-  });
+gateCommand
+  .command("check-ticket")
+  .description("Check all 7 ticket gates at once for a specific ticket")
+  .argument("<ticket-id>", "Ticket ID (e.g., POWR-500)")
+  .option("--repo <path>", "Repository path", process.cwd())
+  .option("-w, --workflow <id>", "Workflow ID (or set POWR_WF env var)")
+  .option("--json", "Output as JSON")
+  .action(
+    (
+      ticketId: string,
+      opts: { repo: string; workflow?: string; json?: boolean }
+    ) => {
+      const db = getDb();
+      const gates = new GateRepo(db);
+      const ticketWorkflows = new TicketWorkflowRepo(db);
+
+      const workflow = requireWorkflow(db, opts);
+
+      const tw = ticketWorkflows.findByTicketId(workflow.id, ticketId);
+      if (!tw) {
+        if (opts.json) {
+          console.log(
+            JSON.stringify({
+              allPassed: false,
+              ticket: ticketId,
+              error: `no ticket workflow for ${ticketId}`,
+            })
+          );
+        } else {
+          console.error(`No ticket workflow found for ${ticketId}`);
+        }
+        process.exit(1);
+      }
+
+      const TICKET_GATES = [
+        "ticket_in_progress",
+        "investigation",
+        "code_committed",
+        "coderabbit_review",
+        "findings_crossreferenced",
+        "findings_resolved",
+        "acceptance_criteria",
+      ];
+
+      const passedNames = gates.getPassedNamesForTicket(workflow.id, tw.id);
+      const gateResults = TICKET_GATES.map((g) => ({
+        name: g,
+        passed: passedNames.has(g),
+      }));
+      const allPassed = gateResults.every((g) => g.passed);
+
+      if (opts.json) {
+        console.log(
+          JSON.stringify({
+            allPassed,
+            ticket: ticketId,
+            stage: tw.stage,
+            gates: gateResults,
+          })
+        );
+      } else {
+        console.log(`Ticket: ${ticketId} (stage: ${tw.stage})`);
+        console.log();
+        for (const gate of gateResults) {
+          console.log(`  ${gate.passed ? "✅" : "⬜"} ${gate.name}`);
+        }
+        console.log();
+        console.log(allPassed ? "All gates passed." : "Some gates missing.");
+      }
+
+      db.close();
+      process.exit(allPassed ? 0 : 1);
+    }
+  );
 
 gateCommand
   .command("list")

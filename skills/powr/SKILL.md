@@ -271,13 +271,133 @@ Run the per-ticket workflow below in the current session.
 
 ### Batch: wave-based parallel worktrees
 
-1. Build dependency DAG from ticket relations
-2. Group into waves (independent tickets together)
-3. Present execution plan, wait for approval
-4. Launch each wave as parallel background agents in worktrees
-5. Merge worktrees between waves (rebase + ff-only)
-6. Run static analysis after merge
-7. Next wave
+#### Step 1 — Resolve tickets
+
+Fetch all tickets for the cycle/project via Linear MCP. For each, call `get_issue` with `includeRelations: true` to capture blockers.
+
+#### Step 2 — Build dependency DAG + waves
+
+Group tickets into waves:
+- **Wave 1**: tickets with no unresolved blockers
+- **Wave 2**: tickets that depend only on Wave 1 completions
+- etc.
+
+#### Step 3 — Present wave plan
+
+Show the user the wave breakdown. Wait for approval before launching.
+
+#### Step 4 — Launch wave
+
+For each ticket in the wave, spawn a parallel Agent with `isolation: "worktree"`. Each agent receives the self-contained prompt template below. All agents in a wave run concurrently.
+
+**Agent prompt template** (substitute `{TICKET_ID}`, `{WORKFLOW_ID}`, `{TICKET_DESCRIPTION}`, `{ACCEPTANCE_CRITERIA}`, `{PROJECT_NAME}`):
+
+```
+You are executing ticket {TICKET_ID} in an isolated worktree.
+
+Workflow ID: {WORKFLOW_ID}
+Ticket: {TICKET_ID}
+Description: {TICKET_DESCRIPTION}
+Acceptance Criteria: {ACCEPTANCE_CRITERIA}
+Project: {PROJECT_NAME}
+
+IMPORTANT: You are in a worktree — always pass `-w {WORKFLOW_ID}` on every powr-workmaxxing command.
+
+## Step 1: Mark In Progress
+mcp__plugin_linear_linear__save_issue({ id: "{TICKET_ID}", state: "In Progress" })
+powr-workmaxxing gate record ticket_in_progress -w {WORKFLOW_ID} --ticket {TICKET_ID} --evidence '{}'
+
+## Step 2: INVESTIGATING
+- Read ticket description and ACs from Linear
+- Fetch all project tickets for context:
+  mcp__plugin_linear_linear__list_issues({ project: "{PROJECT_NAME}", team: "POWR" })
+  mcp__plugin_linear_linear__get_issue({ id: "{TICKET_ID}", includeRelations: true })
+- Explore codebase: similar features, types, utilities, state, constraints
+- Post investigation comment on the ticket via Linear MCP
+- Record gate:
+  powr-workmaxxing gate record investigation -w {WORKFLOW_ID} --ticket {TICKET_ID} --evidence '{"commentUrl":"<url>"}'
+
+## Step 3: IMPLEMENTING
+- Write code following investigation findings
+- Commit changes (include meaningful commit message)
+- Record gate:
+  powr-workmaxxing gate record code_committed -w {WORKFLOW_ID} --ticket {TICKET_ID} --evidence '{"commitSha":"<sha>"}'
+
+## Step 4: CODE_REVIEWING
+- If /coderabbit:review skill is available, run it. Otherwise, perform a thorough self-review:
+  read every changed file, check for bugs, edge cases, security issues, style violations.
+- Post review comment on ticket
+- Record gate:
+  powr-workmaxxing gate record coderabbit_review -w {WORKFLOW_ID} --ticket {TICKET_ID} --evidence '{"reviewUrl":"<url>"}'
+
+## Step 5: CROSS_REFING
+- Search ALL tickets for related work:
+  mcp__plugin_linear_linear__list_issues({ query: "<finding keywords>", team: "POWR", limit: 50 })
+  mcp__plugin_linear_linear__list_issues({ state: "backlog", team: "POWR" })
+- Classify findings: "Must Fix Now" vs "Covered by existing ticket" vs "Recurring pattern"
+- Post cross-reference comment on ticket
+- Record gate:
+  powr-workmaxxing gate record findings_crossreferenced -w {WORKFLOW_ID} --ticket {TICKET_ID} --evidence '{"commentUrl":"<url>"}'
+
+## Step 6: FIXING
+- Fix all "Must Fix Now" items from cross-referencing
+- Post resolution comment on ticket
+- Record gate:
+  powr-workmaxxing gate record findings_resolved -w {WORKFLOW_ID} --ticket {TICKET_ID} --evidence '{"commentUrl":"<url>"}'
+
+## Step 7: VERIFYING_ACS
+- Extract ACs from ticket description
+- Verify each AC against the implementation
+- Post verification comment on ticket
+- Record gate:
+  powr-workmaxxing gate record acceptance_criteria -w {WORKFLOW_ID} --ticket {TICKET_ID} --evidence '{"commentUrl":"<url>"}'
+
+## Completion
+- Mark ticket Done in Linear:
+  mcp__plugin_linear_linear__save_issue({ id: "{TICKET_ID}", state: "Done" })
+- Output: "TICKET_DONE: {TICKET_ID}"
+```
+
+#### Step 5 — Post-wave verification
+
+After all agents in a wave complete, verify every ticket passed all gates:
+
+```bash
+powr-workmaxxing gate check-ticket {TICKET_ID} -w {WORKFLOW_ID} --json
+```
+
+Run this for each ticket in the wave. If any ticket has missing gates:
+1. Report which tickets failed and which gates are missing
+2. Ask the user how to proceed (retry, skip, or abort)
+3. Do NOT merge until the user decides
+
+#### Step 6 — Merge verified worktrees
+
+For each verified worktree:
+```bash
+cd <worktree-path> && git rebase main && cd <main-repo> && git merge --ff-only <worktree-branch>
+```
+
+#### Step 7 — Static analysis after merge
+
+```bash
+powr-workmaxxing repo analyze
+```
+
+If critical issues found, stop and report before proceeding to the next wave.
+
+#### Step 8 — Next wave / completion
+
+Repeat Steps 4-7 for each remaining wave.
+
+After the final wave, record the batch completion gate and advance:
+
+```bash
+powr-workmaxxing gate record all_tickets_done -w {WORKFLOW_ID} --evidence '{}'
+powr-workmaxxing advance -w {WORKFLOW_ID}
+```
+
+The advance command will print a stop directive. STOP. Tell the user: "All tickets executed. Type `/powr ship` to verify and ship." Do not call any more tools.
 
 ### Per-ticket workflow
 
