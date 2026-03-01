@@ -220,10 +220,15 @@ mcp__plugin_linear_linear__list_issues({ query: "<title keywords>", team: "POWR"
 - **Canceled** → ask why before re-creating.
 - Partial overlap → ask user: extend existing or create new?
 
-Create tickets via Linear MCP. Set dependencies, labels, estimates, ACs.
+For each ticket from the plan:
+1. Check Linear for duplicates (all statuses) using the query above
+2. Call `mcp__plugin_linear_linear__save_issue` with all required fields (title, team, description with ACs, labels, estimates, priority)
+3. Collect the returned ticket identifier (e.g., "POWR-500")
+4. Set dependencies between tickets using `blocks`/`blockedBy` fields
 
+Record the gate with **real ticket IDs** from Linear (not placeholders):
 ```bash
-powr-workmaxxing gate record tickets_created --evidence '{"ticketIds":["POWR-XXX"]}'
+powr-workmaxxing gate record tickets_created --evidence '{"ticketIds":["POWR-500","POWR-501"]}'
 ```
 
 **Clean up the spec file** — it's been fully absorbed into the plan and then into tickets. Delete it so stale artifacts don't accumulate:
@@ -234,6 +239,15 @@ rm .claude/specs/<name>.md
 ```bash
 powr-workmaxxing advance  # TICKETING → EXECUTING
 ```
+
+### STOP — /powr plan is complete
+
+**You are DONE. Do NOT continue to execution.**
+
+Tell the user:
+> "Tickets created. Type `/powr execute` to start building."
+
+Then STOP. Do not proceed to the execute phase. Do not call any more tools. Do not start working on tickets. The user must explicitly invoke `/powr execute`.
 
 ---
 
@@ -266,6 +280,12 @@ Run the per-ticket workflow below in the current session.
 
 ### Per-ticket workflow
 
+**Immediately** mark the ticket In Progress in Linear (the `ticket_in_progress` gate auto-records via hook):
+
+```
+mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Progress" })
+```
+
 #### 1. INVESTIGATING
 - Read ticket description and ACs from Linear
 - **Check the big picture** — fetch all project tickets + dependency chain:
@@ -276,16 +296,15 @@ Run the per-ticket workflow below in the current session.
   Understand where this fits. What was just built. What's coming next.
 - Explore codebase: 5 questions (similar features, types, utilities, state, constraints)
 - Post investigation comment with project context
-- Record: `powr-workmaxxing gate record investigation -w <wf-id> --evidence '{"commentUrl":"..."}'`
+- Record: `powr-workmaxxing gate record investigation --ticket <ticket-id> --evidence '{"commentUrl":"..."}'`
 
 #### 2. IMPLEMENTING
 - Write code following investigation findings
-- Commit changes
-- Record: `powr-workmaxxing gate record code_committed -w <wf-id> --evidence '{"commitSha":"..."}'`
+- Commit changes (the `code_committed` gate auto-records via post-commit hook with the real SHA)
 
 #### 3. CODE_REVIEWING
 - Run `/coderabbit:review`
-- Record: `powr-workmaxxing gate record coderabbit_review -w <wf-id> --evidence '{"reviewUrl":"..."}'`
+- Record: `powr-workmaxxing gate record coderabbit_review --ticket <ticket-id> --evidence '{"reviewUrl":"..."}'`
 
 #### 4. CROSS_REFING
 - **Search ALL tickets** — every project, every cycle, backlog, future:
@@ -296,18 +315,18 @@ Run the per-ticket workflow below in the current session.
 - For each finding, check if ANY existing ticket covers it
 - Classify: "Must Fix Now" (no coverage) vs "Covered by POWR-450 (future)" vs "Recurring pattern"
 - Post cross-reference comment
-- Record: `powr-workmaxxing gate record findings_crossreferenced -w <wf-id> --evidence '{"commentUrl":"..."}'`
+- Record: `powr-workmaxxing gate record findings_crossreferenced --ticket <ticket-id> --evidence '{"commentUrl":"..."}'`
 
 #### 5. FIXING
 - Fix all "Must Fix Now" items
 - Post resolution comment
-- Record: `powr-workmaxxing gate record findings_resolved -w <wf-id> --evidence '{"commentUrl":"..."}'`
+- Record: `powr-workmaxxing gate record findings_resolved --ticket <ticket-id> --evidence '{"commentUrl":"..."}'`
 
 #### 6. VERIFYING_ACS
 - Extract ACs from ticket
 - Verify each AC
 - Post verification comment
-- Record: `powr-workmaxxing gate record acceptance_criteria -w <wf-id> --evidence '{"commentUrl":"..."}'`
+- Record: `powr-workmaxxing gate record acceptance_criteria --ticket <ticket-id> --evidence '{"commentUrl":"..."}'`
 
 #### 7. DONE
 - **Check what this unblocks:**

@@ -126,6 +126,32 @@ describe("validateGateEvidence", () => {
     });
     expect(result.valid).toBe(true);
   });
+
+  it("requires linearIssueId for ticket_in_progress", () => {
+    const result = validateGateEvidence("ticket_in_progress", {});
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("ticket_in_progress");
+  });
+
+  it("accepts valid ticket_in_progress evidence", () => {
+    const result = validateGateEvidence("ticket_in_progress", {
+      linearIssueId: "POWR-500",
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("requires commitSha for code_committed", () => {
+    const result = validateGateEvidence("code_committed", {});
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("code_committed");
+  });
+
+  it("accepts valid code_committed evidence with SHA", () => {
+    const result = validateGateEvidence("code_committed", {
+      commitSha: "abc1234",
+    });
+    expect(result.valid).toBe(true);
+  });
 });
 
 describe("getTransitionChain", () => {

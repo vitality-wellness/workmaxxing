@@ -65,7 +65,7 @@ const POWR_HOOKS = {
       ],
     },
     {
-      matcher: "mcp__plugin_linear_linear__update_issue",
+      matcher: "mcp__plugin_linear_linear__save_issue",
       hooks: [
         {
           type: "command",
@@ -75,8 +75,7 @@ const POWR_HOOKS = {
       ],
     },
     {
-      matcher:
-        "mcp__plugin_linear_linear__create_issue|mcp__plugin_linear_linear__update_issue",
+      matcher: "mcp__plugin_linear_linear__save_issue",
       hooks: [
         {
           type: "command",
@@ -104,6 +103,16 @@ const POWR_HOOKS = {
           type: "command",
           command:
             '"$CLAUDE_PROJECT_DIR"/.claude/hooks/powr-hook.sh post-commit',
+        },
+      ],
+    },
+    {
+      matcher: "mcp__plugin_linear_linear__save_issue",
+      hooks: [
+        {
+          type: "command",
+          command:
+            '"$CLAUDE_PROJECT_DIR"/.claude/hooks/powr-hook.sh auto-record-status',
         },
       ],
     },

@@ -68,4 +68,11 @@ describe("workflow config", () => {
     const config = getWorkflowConfig();
     expect(config.ticketStages["DONE"]?.nextStage).toBeNull();
   });
+
+  it("QUEUED requires ticket_in_progress gate", () => {
+    const config = getWorkflowConfig();
+    expect(config.ticketStages["QUEUED"]?.requiredGates).toContain(
+      "ticket_in_progress"
+    );
+  });
 });

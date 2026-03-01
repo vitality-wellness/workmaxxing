@@ -218,7 +218,7 @@ handle_review_plan() {
 }
 
 handle_enforce_gates() {
-  # PreToolUse on update_issue — block Done transition without all gates
+  # PreToolUse on save_issue — block Done transition without all ticket-scoped gates
   if ! has_db; then exit 0; fi
 
   local STATE TICKET_ID
@@ -229,28 +229,65 @@ handle_enforce_gates() {
     exit 0
   fi
 
+  # Find ticket workflow for this ticket
   local TW_ID MISSING
   TW_ID=$(query "SELECT tw.id FROM ticket_workflows tw JOIN workflows w ON tw.workflow_id=w.id WHERE tw.ticket_id='$TICKET_ID' AND w.active=1 LIMIT 1")
-  if [[ -z "$TW_ID" ]]; then exit 0; fi
+
+  # If no ticket workflow exists but there IS an active workflow, block — ticket hasn't been tracked
+  if [[ -z "$TW_ID" ]]; then
+    local HAS_ACTIVE_WF
+    HAS_ACTIVE_WF=$(query "SELECT 1 FROM workflows WHERE active=1 AND repo='$PROJECT_DIR' LIMIT 1")
+    if [[ -n "$HAS_ACTIVE_WF" ]]; then
+      deny "BLOCKED: Cannot mark $TICKET_ID as Done — no ticket workflow exists. Record a gate with --ticket $TICKET_ID first to create one."
+    fi
+    exit 0
+  fi
 
   local WF_ID
   WF_ID=$(query "SELECT workflow_id FROM ticket_workflows WHERE id='$TW_ID'")
 
-  for GATE in investigation code_committed coderabbit_review findings_crossreferenced findings_resolved acceptance_criteria; do
+  # Check ticket-scoped gates (WHERE ticket_workflow_id = TW_ID)
+  for GATE in ticket_in_progress investigation code_committed coderabbit_review findings_crossreferenced findings_resolved acceptance_criteria; do
     local PASSED
-    PASSED=$(query "SELECT 1 FROM gates WHERE workflow_id='$WF_ID' AND gate_name='$GATE' LIMIT 1")
+    PASSED=$(query "SELECT 1 FROM gates WHERE workflow_id='$WF_ID' AND ticket_workflow_id='$TW_ID' AND gate_name='$GATE' LIMIT 1")
     if [[ -z "$PASSED" ]]; then
       MISSING="${MISSING:-}  ⬜ $GATE\n"
     fi
   done
 
   if [[ -n "${MISSING:-}" ]]; then
-    deny "BLOCKED: Cannot mark $TICKET_ID as Done. Missing gates:\n$MISSING\nComplete these before setting state to Done."
+    deny "BLOCKED: Cannot mark $TICKET_ID as Done. Missing gates (ticket-scoped):\n$MISSING\nComplete these before setting state to Done."
+  fi
+}
+
+handle_auto_record_status() {
+  # PostToolUse on save_issue — auto-record ticket_in_progress when state is set to "In Progress"
+  if ! has_db; then exit 0; fi
+  if is_bypassed; then exit 0; fi
+
+  local STATE TICKET_ID
+  STATE=$(json_field '.tool_input.state // empty')
+  TICKET_ID=$(json_field '.tool_input.id // empty')
+
+  if [[ -z "$STATE" ]] || [[ -z "$TICKET_ID" ]]; then exit 0; fi
+
+  # Normalize state comparison
+  local STATE_LOWER
+  STATE_LOWER=$(echo "$STATE" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+  if [[ "$STATE_LOWER" != "inprogress" ]]; then exit 0; fi
+
+  # Auto-record ticket_in_progress gate via CLI
+  if command -v powr-workmaxxing &>/dev/null; then
+    powr-workmaxxing gate record ticket_in_progress \
+      --ticket "$TICKET_ID" \
+      --repo "$PROJECT_DIR" \
+      --evidence "{\"linearIssueId\":\"$TICKET_ID\"}" 2>/dev/null && \
+      echo "Auto-recorded: ticket_in_progress for $TICKET_ID" || true
   fi
 }
 
 handle_post_commit() {
-  # PostToolUse on Bash — trigger CodeRabbit after git commit
+  # PostToolUse on Bash — auto-record code_committed + trigger CodeRabbit
   if ! has_db; then exit 0; fi
   if is_bypassed; then exit 0; fi
 
@@ -262,6 +299,24 @@ handle_post_commit() {
   WF_ID=$(query "SELECT id FROM workflows WHERE active=1 AND repo='$PROJECT_DIR' ORDER BY updated_at DESC LIMIT 1")
   if [[ -z "$WF_ID" ]]; then exit 0; fi
 
+  # Extract commit SHA from stdout (git commit output)
+  local STDOUT COMMIT_SHA
+  STDOUT=$(json_field '.tool_result.stdout // empty')
+  COMMIT_SHA=$(echo "$STDOUT" | grep -oE '[0-9a-f]{7,40}' | head -1)
+
+  # Auto-record code_committed for ticket in IMPLEMENTING stage
+  if [[ -n "$COMMIT_SHA" ]] && command -v powr-workmaxxing &>/dev/null; then
+    local TICKET_ID
+    TICKET_ID=$(query "SELECT ticket_id FROM ticket_workflows WHERE workflow_id='$WF_ID' AND stage='IMPLEMENTING' LIMIT 1")
+    if [[ -n "$TICKET_ID" ]]; then
+      powr-workmaxxing gate record code_committed \
+        --ticket "$TICKET_ID" \
+        --repo "$PROJECT_DIR" \
+        --evidence "{\"commitSha\":\"$COMMIT_SHA\"}" 2>/dev/null && \
+        echo "Auto-recorded: code_committed ($COMMIT_SHA) for $TICKET_ID" || true
+    fi
+  fi
+
   local HAS_REVIEW
   HAS_REVIEW=$(query "SELECT 1 FROM gates WHERE workflow_id='$WF_ID' AND gate_name='coderabbit_review' LIMIT 1")
   if [[ -n "$HAS_REVIEW" ]]; then exit 0; fi
@@ -270,11 +325,12 @@ handle_post_commit() {
 }
 
 handle_post_comment() {
-  # PostToolUse on create_comment — auto-detect gates from comment text
+  # PostToolUse on create_comment — auto-detect gates from comment text, scoped to ticket
   if ! has_db; then exit 0; fi
 
-  local COMMENT_BODY
+  local COMMENT_BODY ISSUE_ID
   COMMENT_BODY=$(json_field '.tool_input.body // empty')
+  ISSUE_ID=$(json_field '.tool_input.issueId // empty')
   if [[ -z "$COMMENT_BODY" ]]; then exit 0; fi
 
   # Use CLI for gate detection if available
@@ -286,9 +342,16 @@ handle_post_comment() {
     COUNT=$(echo "$DETECTED" | jq 'length' 2>/dev/null || echo "0")
 
     if [[ "$COUNT" -gt 0 ]]; then
-      # Record each detected gate
+      # Build --ticket flag if we have an issueId
+      local TICKET_FLAG=""
+      if [[ -n "$ISSUE_ID" ]]; then
+        TICKET_FLAG="--ticket $ISSUE_ID"
+      fi
+
+      # Record each detected gate (scoped to ticket if available)
       echo "$DETECTED" | jq -r '.[].gate' 2>/dev/null | while IFS= read -r GATE_NAME; do
-        powr-workmaxxing gate record "$GATE_NAME" --repo "$PROJECT_DIR" 2>/dev/null || true
+        # shellcheck disable=SC2086
+        powr-workmaxxing gate record "$GATE_NAME" --repo "$PROJECT_DIR" $TICKET_FLAG 2>/dev/null || true
       done
 
       # Output next directive
@@ -302,14 +365,14 @@ handle_post_comment() {
 }
 
 handle_validate_ticket() {
-  # PreToolUse on create_issue/update_issue — validate ticket fields
+  # PreToolUse on save_issue — validate ticket fields
   if ! has_db; then exit 0; fi
 
-  local TOOL_NAME
-  TOOL_NAME=$(json_field '.tool_name // empty')
-
-  # For update_issue, only validate if description is being changed
-  if [[ "$TOOL_NAME" == *"update_issue"* ]]; then
+  # For save_issue updates (id present but no title), only validate if description is being changed
+  local HAS_ID HAS_TITLE
+  HAS_ID=$(json_field '.tool_input.id // empty')
+  HAS_TITLE=$(json_field '.tool_input.title // empty')
+  if [[ -n "$HAS_ID" && -z "$HAS_TITLE" ]]; then
     local DESC
     DESC=$(json_field '.tool_input.description // empty')
     if [[ -z "$DESC" ]]; then exit 0; fi
@@ -402,6 +465,7 @@ case "$HANDLER" in
   lifecycle)            handle_lifecycle ;;
   review-plan)          handle_review_plan ;;
   enforce-gates)        handle_enforce_gates ;;
+  auto-record-status)   handle_auto_record_status ;;
   post-commit)          handle_post_commit ;;
   post-comment)         handle_post_comment ;;
   validate-ticket)      handle_validate_ticket ;;
@@ -411,8 +475,8 @@ case "$HANDLER" in
   *)
     echo "Unknown handler: $HANDLER" >&2
     echo "Handlers: require-ticket, detect-work, lifecycle, review-plan, enforce-gates," >&2
-    echo "          post-commit, post-comment, validate-ticket, merge-coordination," >&2
-    echo "          context-handoff, notification" >&2
+    echo "          auto-record-status, post-commit, post-comment, validate-ticket," >&2
+    echo "          merge-coordination, context-handoff, notification" >&2
     exit 1
     ;;
 esac

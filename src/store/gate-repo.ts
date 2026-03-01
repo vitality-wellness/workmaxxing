@@ -72,6 +72,31 @@ export class GateRepo {
     return row ? rowToGate(row) : null;
   }
 
+  isPassedForTicket(
+    workflowId: string,
+    ticketWorkflowId: string,
+    gateName: string
+  ): boolean {
+    const row = this.db
+      .prepare(
+        "SELECT 1 FROM gates WHERE workflow_id = ? AND ticket_workflow_id = ? AND gate_name = ? LIMIT 1"
+      )
+      .get(workflowId, ticketWorkflowId, gateName);
+    return row !== undefined;
+  }
+
+  getPassedNamesForTicket(
+    workflowId: string,
+    ticketWorkflowId: string
+  ): Set<string> {
+    const rows = this.db
+      .prepare(
+        "SELECT DISTINCT gate_name FROM gates WHERE workflow_id = ? AND ticket_workflow_id = ?"
+      )
+      .all(workflowId, ticketWorkflowId) as Array<{ gate_name: string }>;
+    return new Set(rows.map((r) => r.gate_name));
+  }
+
   isPassed(workflowId: string, gateName: string): boolean {
     const row = this.db
       .prepare(

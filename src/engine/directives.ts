@@ -15,6 +15,11 @@ interface GateDirective {
  */
 const TICKET_DIRECTIVES: GateDirective[] = [
   {
+    gate: "ticket_in_progress",
+    directive:
+      "MANDATORY: Investigate the codebase first. Answer 5 questions (similar features, types, utilities, state, constraints). Post investigation comment.",
+  },
+  {
     gate: "investigation",
     directive:
       "Implement the feature following your investigation findings. Commit when done. After commit, run /coderabbit:review.",
@@ -87,7 +92,10 @@ const FEATURE_DIRECTIVES: GateDirective[] = [
   },
   {
     gate: "tickets_created",
-    directive: "Tickets created. Use /execute to start working through them.",
+    directive:
+      "STOP. /powr plan is complete. Do NOT continue to execution. " +
+      'Tell the user: "Tickets created. Type `/powr execute` to start building." ' +
+      "Do not call any more tools. Do not start working on tickets. The user must explicitly invoke /powr execute.",
   },
   {
     gate: "all_tickets_done",
@@ -127,7 +135,7 @@ export function getNextDirective(
 
   // No gates passed yet — show the first required action
   if (level === "ticket") {
-    return "MANDATORY: Investigate the codebase first. Answer 5 questions (similar features, types, utilities, state, constraints). Post investigation comment.";
+    return "MANDATORY: Set ticket to In Progress in Linear. The ticket_in_progress gate will auto-record.\n  mcp__plugin_linear_linear__save_issue({ id: \"<ticket-id>\", state: \"In Progress\" })";
   }
   return null;
 }

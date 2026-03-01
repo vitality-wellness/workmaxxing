@@ -88,5 +88,13 @@ export const advanceCommand = new Command("advance")
       console.log(`Advanced: ${previousStage} → ${nextStage}`);
     }
 
+    // After TICKETING → EXECUTING, print stop directive so Claude halts
+    if (previousStage === "TICKETING" && nextStage === "EXECUTING") {
+      console.log();
+      console.log("STOP. /powr plan is complete. Do NOT continue to execution.");
+      console.log('Tell the user: "Tickets created. Type `/powr execute` to start building."');
+      console.log("Do not call any more tools. Do not start working on tickets.");
+    }
+
     db.close();
   });

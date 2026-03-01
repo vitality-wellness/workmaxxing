@@ -67,7 +67,7 @@ const FEATURE_STAGES: Record<string, StageConfig> = {
 const TICKET_STAGES: Record<string, StageConfig> = {
   QUEUED: {
     description: "Waiting to be started",
-    requiredGates: [],
+    requiredGates: ["ticket_in_progress"],
     nextStage: "INVESTIGATING",
   },
   INVESTIGATING: {

@@ -19,8 +19,9 @@ const GATE_EVIDENCE_SCHEMAS: Record<string, z.ZodType> = {
   tickets_created: z.object({ ticketIds: z.array(z.string()) }),
   all_tickets_done: z.object({ ticketCount: z.number() }),
   ship_verified: z.object({ verified: z.boolean() }),
+  ticket_in_progress: z.object({ linearIssueId: z.string() }),
   investigation: z.object({ commentUrl: z.string().optional() }).passthrough(),
-  code_committed: z.object({ commitSha: z.string().optional() }).passthrough(),
+  code_committed: z.object({ commitSha: z.string() }).passthrough(),
   coderabbit_review: z
     .object({ reviewUrl: z.string().optional() })
     .passthrough(),
