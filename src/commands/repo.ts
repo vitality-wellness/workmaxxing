@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { getRepoConfig, setRepoConfigField } from "../config/repo-config.js";
+import { getRepoConfig, setRepoConfigField, registerRepo } from "../config/repo-config.js";
 import { execSync } from "node:child_process";
 
 export const repoCommand = new Command("repo").description(
@@ -70,11 +70,17 @@ repoCommand
     else if (value === "null") parsed = null;
     else parsed = value;
 
-    const ok = setRepoConfigField(opts.repo, key, parsed);
+    let ok = setRepoConfigField(opts.repo, key, parsed);
     if (!ok) {
-      console.error(
-        `No configuration found for this repo. Configure in ~/.powr/repos.json`
-      );
+      // Auto-register the repo with minimal defaults
+      ok = registerRepo(opts.repo);
+      if (ok) {
+        ok = setRepoConfigField(opts.repo, key, parsed);
+      }
+    }
+
+    if (!ok) {
+      console.error(`Failed to set config. Check ~/.powr/repos.json`);
       process.exit(1);
     }
 

@@ -105,6 +105,29 @@ export function getRepoConfigKey(repoPath: string): string | null {
 }
 
 /**
+ * Register a new repo with minimal defaults using its directory basename as the key.
+ */
+export function registerRepo(repoPath: string): boolean {
+  const configs = loadRepoConfigs();
+  const basename = repoPath.replace(/\/+$/, "").split("/").pop();
+  if (!basename) return false;
+
+  // Already registered
+  if (getRepoConfigKey(repoPath)) return true;
+
+  configs[basename] = {
+    name: basename,
+    team: "",
+    productionPaths: [],
+    analyzeCommand: null,
+    restartCommand: null,
+  };
+  writeFileSync(CONFIG_PATH, JSON.stringify(configs, null, 2));
+  cachedConfig = configs;
+  return true;
+}
+
+/**
  * Set a field on a repo's config and write back to disk.
  */
 export function setRepoConfigField(

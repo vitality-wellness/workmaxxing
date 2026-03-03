@@ -19,11 +19,13 @@ interface DetectionRule {
 const DETECTION_RULES: DetectionRule[] = [
   {
     gate: "investigation",
-    patterns: [/investigation\s+findings/i],
+    // Match "## Investigation", "Investigation Findings", etc.
+    patterns: [/##\s*investigation|investigation\s+findings/i],
   },
   {
     gate: "findings_crossreferenced",
-    patterns: [/code\s+review\s+findings\s*\(?\s*coderabbit\s*\)?/i],
+    // Match "## Cross-Reference", "Code Review Findings (CodeRabbit)", etc.
+    patterns: [/cross[- ]?referenc|code\s+review\s+findings\s*\(?\s*coderabbit\s*\)?/i],
     autoPass: [
       {
         gate: "findings_resolved",
@@ -37,9 +39,11 @@ const DETECTION_RULES: DetectionRule[] = [
   },
   {
     gate: "acceptance_criteria",
+    // Match "## AC Verification", "Acceptance Criteria Verification", etc.
+    // AND "All Pass", "All Criteria Passed", "ALL ACs PASS", etc.
     patterns: [
-      /acceptance\s+criteria\s+verification/i,
-      /all\s+criteria\s+passed/i,
+      /(?:acceptance\s+criteria|AC)\s+verif|##\s*AC\s+verif/i,
+      /all\s+(?:criteria\s+)?pass|all\s+ACs?\s+pass/i,
     ],
   },
   {

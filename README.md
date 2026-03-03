@@ -152,6 +152,33 @@ The plan file is cleaned up after shipping — tickets are the historical record
 
 ---
 
+## Review mode
+
+Don't want Claude committing and marking tickets Done? Turn on review mode — Claude writes the code but you handle the git workflow.
+
+```bash
+powr-workmaxxing repo set reviewMode true
+```
+
+When review mode is on, `/powr execute` changes:
+
+1. Claude creates a feature branch (`feat/<ticket-id>-<short-description>`)
+2. Investigates and writes code — same as normal
+3. Stages changes with `git add` — **commits are blocked by hooks**
+4. Posts a summary comment on the ticket
+5. Stops — **does not mark the ticket Done**
+
+You take it from there: review the diff, commit, create a PR, merge, mark Done.
+
+CodeRabbit review, cross-referencing, and findings resolution are skipped — your PR review replaces those gates.
+
+```bash
+powr-workmaxxing repo set reviewMode false   # turn it off
+powr-workmaxxing repo info                   # check current setting
+```
+
+---
+
 ## Other commands
 
 ```
@@ -387,6 +414,7 @@ WAL mode. 5s busy timeout for concurrent writers.
 | `post-commit` | PostToolUse Bash | Auto-record `code_committed` with SHA + trigger code review |
 | `post-comment` | PostToolUse create_comment | Auto-detect gates from comments (ticket-scoped) |
 | `validate-ticket` | PreToolUse save_issue | Validate fields + ACs |
+| `block-commit` | PreToolUse Bash | Block `git commit` in review mode |
 | `merge-coordination` | PreToolUse Bash | Enforce rebase-before-merge |
 | `context-handoff` | PreCompact | Remind to post handoff |
 | `notification` | Stop/Notification | macOS notifications |
@@ -424,7 +452,8 @@ powr-workmaxxing
   tickets validate --json '{...}'     Validate ticket fields
 
   repo analyze                        Run static analysis
-  repo info                           Show repo config
+  repo info [--json]                  Show repo config
+  repo set <key> <value>              Set repo config field (e.g. reviewMode true)
 
   audit log [--limit N]               Recent events
 ```

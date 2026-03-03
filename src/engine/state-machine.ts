@@ -7,6 +7,27 @@ import { getWorkflowConfig, type StageConfig } from "./workflow-config.js";
 
 // --- Gate evidence schemas ---
 
+/** Human-readable evidence examples for each gate. Used in error messages and `gate schema`. */
+export const GATE_EVIDENCE_EXAMPLES: Record<string, string> = {
+  spec_document_written: '{"path": ".claude/specs/feature.md"}',
+  plan_written: '{"path": ".claude/plans/feature.md"}',
+  review_architecture: '{"approved": true}',
+  review_code_quality: '{"approved": true}',
+  review_tests: '{"approved": true}',
+  review_performance: '{"approved": true}',
+  review_ticket_decomposition: '{"approved": true}',
+  tickets_created: '{"ticketIds": ["PROJ-123"]}',
+  all_tickets_done: '{"ticketCount": 1}',
+  ship_verified: '{"verified": true}',
+  ticket_in_progress: '{"linearIssueId": "PROJ-123"}',
+  investigation: '{"commentUrl": "optional"}',
+  code_committed: '{"commitSha": "abc1234"}',
+  coderabbit_review: '{"reviewUrl": "optional"}',
+  findings_crossreferenced: '{"commentUrl": "optional"}',
+  findings_resolved: '{"commentUrl": "optional"}',
+  acceptance_criteria: '{"commentUrl": "optional"}',
+};
+
 /** Evidence schemas for each gate. Gates not listed here accept any evidence. */
 const GATE_EVIDENCE_SCHEMAS: Record<string, z.ZodType> = {
   spec_document_written: z.object({ path: z.string() }),
@@ -127,10 +148,12 @@ export function validateGateEvidence(
 
   const result = schema.safeParse(evidence);
   if (!result.success) {
+    const example = GATE_EVIDENCE_EXAMPLES[gateName];
+    const hint = example ? ` Expected format: ${example}` : "";
     return {
       valid: false,
       gate: gateName,
-      error: `Invalid evidence for gate "${gateName}": ${result.error.issues.map((i) => i.message).join(", ")}`,
+      error: `Invalid evidence for gate "${gateName}": ${result.error.issues.map((i) => i.message).join(", ")}.${hint}`,
     };
   }
 

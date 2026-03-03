@@ -5,22 +5,17 @@ import { getDb } from "../store/db.js";
 import { GateRepo } from "../store/gate-repo.js";
 import { AuditRepo } from "../store/audit-repo.js";
 import { TicketWorkflowRepo } from "../store/ticket-workflow-repo.js";
-import { getWorkflowConfig } from "../engine/workflow-config.js";
-import { validateGateEvidence } from "../engine/state-machine.js";
+import { getWorkflowConfig, getTicketStageOrder, deriveGateNextStage, getTicketGateNames } from "../engine/workflow-config.js";
+import { validateGateEvidence, GATE_EVIDENCE_EXAMPLES } from "../engine/state-machine.js";
 import { resolveWorkflow, requireWorkflow } from "../resolve-workflow.js";
 import { detectGatesFromComment } from "../engine/gate-detection.js";
 import { getNextDirective, getDirectiveForGate } from "../engine/directives.js";
 
-/** Maps ticket-scoped gates to the ticket stage they advance to */
-const GATE_NEXT_STAGE: Record<string, string> = {
-  ticket_in_progress: "INVESTIGATING",
-  investigation: "IMPLEMENTING",
-  code_committed: "CODE_REVIEWING",
-  coderabbit_review: "CROSS_REFING",
-  findings_crossreferenced: "FIXING",
-  findings_resolved: "VERIFYING_ACS",
-  acceptance_criteria: "DONE",
-};
+/** Maps ticket-scoped gates to the ticket stage they advance to (derived from config) */
+const GATE_NEXT_STAGE = deriveGateNextStage();
+
+/** Ordered ticket stage names for monotonic advancement */
+const TICKET_STAGE_ORDER = getTicketStageOrder();
 
 export const gateCommand = new Command("gate").description(
   "Manage workflow gates (checkpoints)"
@@ -119,6 +114,24 @@ gateCommand
 
       // --- all_tickets_done verification ---
       if (name === "all_tickets_done") {
+        // Safety net: sync ticket stages from gates before checking.
+        // If all gates passed but stage is stuck (e.g., gates recorded out of order),
+        // advance the stage to DONE so allDone() passes.
+        const allTickets = ticketWorkflows.listForWorkflow(workflow.id);
+        const ticketGateNames = getTicketGateNames();
+        let synced = 0;
+        for (const tw of allTickets) {
+          if (tw.stage === "DONE") continue;
+          const passedNames = gates.getPassedNamesForTicket(workflow.id, tw.id);
+          if (ticketGateNames.every((g) => passedNames.has(g))) {
+            ticketWorkflows.updateStage(tw.id, "DONE");
+            synced++;
+            if (!opts.json) {
+              console.log(`  Synced ${tw.ticketId} stage → DONE (all gates passed)`);
+            }
+          }
+        }
+
         if (!ticketWorkflows.allDone(workflow.id)) {
           const total = ticketWorkflows.countTotal(workflow.id);
           const done = ticketWorkflows.countByStage(workflow.id, "DONE");
@@ -166,11 +179,20 @@ gateCommand
         console.log(`✅ Gate recorded: ${name}${opts.ticket ? ` (ticket: ${opts.ticket})` : ""}`);
       }
 
-      // --- Auto-advance ticket stage ---
+      // --- Auto-advance ticket stage (monotonic — never go backward) ---
       if (ticketWorkflowId && GATE_NEXT_STAGE[name]) {
-        ticketWorkflows.updateStage(ticketWorkflowId, GATE_NEXT_STAGE[name]!);
-        if (!opts.json) {
-          console.log(`  → Ticket stage advanced to ${GATE_NEXT_STAGE[name]}`);
+        const tw = ticketWorkflows.getById(ticketWorkflowId)!;
+        const targetStage = GATE_NEXT_STAGE[name]!;
+        const currentIdx = TICKET_STAGE_ORDER.indexOf(tw.stage);
+        const targetIdx = TICKET_STAGE_ORDER.indexOf(targetStage);
+
+        if (targetIdx > currentIdx) {
+          ticketWorkflows.updateStage(ticketWorkflowId, targetStage);
+          if (!opts.json) {
+            console.log(`  → Ticket stage advanced to ${targetStage}`);
+          }
+        } else if (!opts.json && targetIdx <= currentIdx) {
+          console.log(`  → Ticket already at ${tw.stage} (past ${targetStage}), stage unchanged`);
         }
       }
 
@@ -274,15 +296,7 @@ gateCommand
         process.exit(1);
       }
 
-      const TICKET_GATES = [
-        "ticket_in_progress",
-        "investigation",
-        "code_committed",
-        "coderabbit_review",
-        "findings_crossreferenced",
-        "findings_resolved",
-        "acceptance_criteria",
-      ];
+      const TICKET_GATES = getTicketGateNames();
 
       const passedNames = gates.getPassedNamesForTicket(workflow.id, tw.id);
       const gateResults = TICKET_GATES.map((g) => ({
@@ -379,6 +393,32 @@ gateCommand
       }
     }
   );
+
+gateCommand
+  .command("list-ticket-gates")
+  .description("Print ticket gate names (space-separated, for shell scripts)")
+  .action(() => {
+    console.log(getTicketGateNames().join(" "));
+  });
+
+gateCommand
+  .command("schema")
+  .description("Show the expected evidence format for a gate")
+  .argument("[name]", "Gate name (omit to show all)")
+  .action((name?: string) => {
+    if (name) {
+      const example = GATE_EVIDENCE_EXAMPLES[name];
+      if (example) {
+        console.log(`${name}: ${example}`);
+      } else {
+        console.log(`${name}: (no schema — accepts any evidence)`);
+      }
+    } else {
+      for (const [gate, example] of Object.entries(GATE_EVIDENCE_EXAMPLES)) {
+        console.log(`  ${gate}: ${example}`);
+      }
+    }
+  });
 
 gateCommand
   .command("next")

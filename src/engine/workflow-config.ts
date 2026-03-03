@@ -128,3 +128,44 @@ export function getFeatureStageNames(): string[] {
 export function getTicketStageNames(): string[] {
   return Object.keys(TICKET_STAGES);
 }
+
+/** Get the ordered ticket stage chain (QUEUED → ... → DONE) */
+export function getTicketStageOrder(): string[] {
+  const order: string[] = ["QUEUED"];
+  let current = "QUEUED";
+  while (TICKET_STAGES[current]?.nextStage) {
+    current = TICKET_STAGES[current]!.nextStage!;
+    order.push(current);
+  }
+  return order;
+}
+
+/**
+ * Derive the gate→nextStage mapping from TICKET_STAGES config.
+ * Each ticket stage has exactly one required gate; recording that gate
+ * should advance the ticket to the stage's nextStage.
+ */
+export function deriveGateNextStage(): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const [, stageConfig] of Object.entries(TICKET_STAGES)) {
+    if (stageConfig.nextStage) {
+      for (const gate of stageConfig.requiredGates) {
+        map[gate] = stageConfig.nextStage;
+      }
+    }
+  }
+  return map;
+}
+
+/** All ticket-scoped gate names in order */
+export function getTicketGateNames(): string[] {
+  const order = getTicketStageOrder();
+  const gates: string[] = [];
+  for (const stage of order) {
+    const config = TICKET_STAGES[stage];
+    if (config) {
+      gates.push(...config.requiredGates);
+    }
+  }
+  return gates;
+}

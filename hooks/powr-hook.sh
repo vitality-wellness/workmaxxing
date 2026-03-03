@@ -303,7 +303,14 @@ handle_enforce_gates() {
   WF_ID=$(query "SELECT workflow_id FROM ticket_workflows WHERE id='$TW_ID'")
 
   # Check ticket-scoped gates (WHERE ticket_workflow_id = TW_ID)
-  for GATE in ticket_in_progress investigation code_committed coderabbit_review findings_crossreferenced findings_resolved acceptance_criteria; do
+  # Gate list derived from CLI to avoid maintaining a third copy
+  local GATE_LIST
+  if command -v powr-workmaxxing &>/dev/null; then
+    GATE_LIST=$(powr-workmaxxing gate list-ticket-gates 2>/dev/null || echo "ticket_in_progress investigation code_committed coderabbit_review findings_crossreferenced findings_resolved acceptance_criteria")
+  else
+    GATE_LIST="ticket_in_progress investigation code_committed coderabbit_review findings_crossreferenced findings_resolved acceptance_criteria"
+  fi
+  for GATE in $GATE_LIST; do
     local PASSED
     PASSED=$(query "SELECT 1 FROM gates WHERE workflow_id='$WF_ID' AND ticket_workflow_id='$TW_ID' AND gate_name='$GATE' LIMIT 1")
     if [[ -z "$PASSED" ]]; then
@@ -334,11 +341,13 @@ handle_auto_record_status() {
 
   # Auto-record ticket_in_progress gate via CLI
   if command -v powr-workmaxxing &>/dev/null; then
-    powr-workmaxxing gate record ticket_in_progress \
+    local GATE_OUTPUT
+    GATE_OUTPUT=$(powr-workmaxxing gate record ticket_in_progress \
       --ticket "$TICKET_ID" \
       --repo "$PROJECT_DIR" \
-      --evidence "{\"linearIssueId\":\"$TICKET_ID\"}" 2>/dev/null && \
-      echo "Auto-recorded: ticket_in_progress for $TICKET_ID" || true
+      --evidence "{\"linearIssueId\":\"$TICKET_ID\"}" 2>&1) && \
+      echo "Auto-recorded: ticket_in_progress for $TICKET_ID" || \
+      echo "WARNING: Failed to auto-record ticket_in_progress for $TICKET_ID: $GATE_OUTPUT. Record manually: powr-workmaxxing gate record ticket_in_progress --ticket $TICKET_ID --evidence '{\"linearIssueId\":\"$TICKET_ID\"}'"
 
     # Rename terminal tab to the ticket being worked on
     set_terminal_title "$TICKET_ID"
@@ -368,11 +377,13 @@ handle_post_commit() {
     local TICKET_ID
     TICKET_ID=$(query "SELECT ticket_id FROM ticket_workflows WHERE workflow_id='$WF_ID' AND stage='IMPLEMENTING' LIMIT 1")
     if [[ -n "$TICKET_ID" ]]; then
-      powr-workmaxxing gate record code_committed \
+      local GATE_OUTPUT
+      GATE_OUTPUT=$(powr-workmaxxing gate record code_committed \
         --ticket "$TICKET_ID" \
         --repo "$PROJECT_DIR" \
-        --evidence "{\"commitSha\":\"$COMMIT_SHA\"}" 2>/dev/null && \
-        echo "Auto-recorded: code_committed ($COMMIT_SHA) for $TICKET_ID" || true
+        --evidence "{\"commitSha\":\"$COMMIT_SHA\"}" 2>&1) && \
+        echo "Auto-recorded: code_committed ($COMMIT_SHA) for $TICKET_ID" || \
+        echo "WARNING: Failed to auto-record code_committed for $TICKET_ID: $GATE_OUTPUT"
     fi
   fi
 
