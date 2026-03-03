@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { getRepoConfig } from "../config/repo-config.js";
+import { getRepoConfig, setRepoConfigField } from "../config/repo-config.js";
 import { execSync } from "node:child_process";
 
 export const repoCommand = new Command("repo").description(
@@ -52,5 +52,31 @@ repoCommand
       console.log(`Production paths: ${config.productionPaths.join(", ")}`);
       console.log(`Analyze:          ${config.analyzeCommand ?? "none"}`);
       console.log(`Restart:          ${config.restartCommand ?? "none"}`);
+      console.log(`Review mode:      ${config.reviewMode ? "on" : "off"}`);
     }
+  });
+
+repoCommand
+  .command("set")
+  .description("Set a repo configuration field")
+  .argument("<key>", "Config field name (e.g. reviewMode)")
+  .argument("<value>", "Value to set (true/false for booleans)")
+  .option("--repo <path>", "Repository path", process.cwd())
+  .action((key: string, value: string, opts: { repo: string }) => {
+    // Parse value — support booleans and null
+    let parsed: unknown;
+    if (value === "true") parsed = true;
+    else if (value === "false") parsed = false;
+    else if (value === "null") parsed = null;
+    else parsed = value;
+
+    const ok = setRepoConfigField(opts.repo, key, parsed);
+    if (!ok) {
+      console.error(
+        `No configuration found for this repo. Configure in ~/.powr/repos.json`
+      );
+      process.exit(1);
+    }
+
+    console.log(`Set ${key} = ${JSON.stringify(parsed)}`);
   });

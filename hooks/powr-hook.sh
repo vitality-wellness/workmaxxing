@@ -85,6 +85,25 @@ get_production_paths() {
   echo "ios/"
 }
 
+get_repo_field() {
+  local FIELD="$1" DEFAULT="${2:-}"
+  if [[ -f "$REPOS_CONFIG" ]] && command -v jq &>/dev/null; then
+    for KEY in $(jq -r 'keys[]' "$REPOS_CONFIG" 2>/dev/null); do
+      if [[ "$PROJECT_DIR" == *"$KEY"* ]]; then
+        local VAL
+        VAL=$(jq -r ".[\"$KEY\"].$FIELD // empty" "$REPOS_CONFIG" 2>/dev/null)
+        echo "${VAL:-$DEFAULT}"
+        return
+      fi
+    done
+  fi
+  echo "$DEFAULT"
+}
+
+is_review_mode() {
+  [[ "$(get_repo_field reviewMode false)" == "true" ]]
+}
+
 # ============================================================================
 # HANDLERS
 # ============================================================================
@@ -257,6 +276,13 @@ handle_enforce_gates() {
 
   if [[ -z "$STATE" ]] || [[ "$(echo "$STATE" | tr '[:upper:]' '[:lower:]')" != "done" ]]; then
     exit 0
+  fi
+
+  if is_bypassed; then exit 0; fi
+
+  # Block Done transitions in review mode
+  if is_review_mode; then
+    deny "REVIEW MODE: Do not mark tickets as Done. The human will review, commit, create a PR, and mark Done."
   fi
 
   # Find ticket workflow for this ticket
@@ -489,6 +515,24 @@ handle_notification() {
   fi
 }
 
+handle_block_commit() {
+  # PreToolUse on Bash — block git commit in review mode
+  if ! has_db; then exit 0; fi
+  if is_bypassed; then exit 0; fi
+  if ! is_review_mode; then exit 0; fi
+
+  local COMMAND
+  COMMAND=$(json_field '.tool_input.command // empty')
+  if echo "$COMMAND" | grep -qE 'git\s+commit' 2>/dev/null; then
+    # Only block if there's an active workflow
+    local WF_ID
+    WF_ID=$(query "SELECT id FROM workflows WHERE active=1 AND repo='$PROJECT_DIR' LIMIT 1")
+    if [[ -n "$WF_ID" ]]; then
+      deny "REVIEW MODE: Do not commit. Stage changes with 'git add' but leave committing to the human. They will review, commit, and create a PR."
+    fi
+  fi
+}
+
 # ============================================================================
 # DISPATCH
 # ============================================================================
@@ -503,6 +547,7 @@ case "$HANDLER" in
   post-commit)          handle_post_commit ;;
   post-comment)         handle_post_comment ;;
   validate-ticket)      handle_validate_ticket ;;
+  block-commit)         handle_block_commit ;;
   merge-coordination)   handle_merge_coordination ;;
   context-handoff)      handle_context_handoff ;;
   notification)         handle_notification ;;
@@ -510,7 +555,7 @@ case "$HANDLER" in
     echo "Unknown handler: $HANDLER" >&2
     echo "Handlers: require-ticket, detect-work, lifecycle, review-plan, enforce-gates," >&2
     echo "          auto-record-status, post-commit, post-comment, validate-ticket," >&2
-    echo "          merge-coordination, context-handoff, notification" >&2
+    echo "          block-commit, merge-coordination, context-handoff, notification" >&2
     exit 1
     ;;
 esac

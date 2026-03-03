@@ -256,6 +256,28 @@ Then STOP. Do not proceed to the execute phase. Do not call any more tools. Do n
 
 Execute tickets with quality gates. Supports single tickets or batches.
 
+### Review Mode Check
+
+Before executing, check if review mode is enabled:
+```bash
+powr-workmaxxing repo info --repo "$CLAUDE_PROJECT_DIR" --json
+```
+
+If `reviewMode` is `true`, the workflow changes:
+1. **Create a feature branch** at the start:
+   ```bash
+   git checkout -b feat/<ticket-id>-<short-description>
+   ```
+2. Do investigation as normal (post findings to Linear)
+3. Write code as normal
+4. **Stage changes** (`git add`) but do NOT commit — hooks will block this
+5. **Do NOT mark ticket as Done** — hooks will block this
+6. **Post a summary comment** on the ticket listing what was implemented
+7. **Tell the user:**
+   > "Changes staged on branch `feat/<ticket-id>-<short-description>`. Please review the diff, commit, and create a PR. Mark the ticket as Done when merged."
+
+In review mode, skip CodeRabbit review (requires a commit), cross-referencing, and findings resolution. The human's PR review replaces these gates.
+
 ### Resolving scope
 
 | User says | What to do |
@@ -406,6 +428,34 @@ The advance command will print a stop directive. STOP. Tell the user: "All ticke
 ```
 mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Progress" })
 ```
+
+**If review mode is ON**, follow the shortened flow below. Otherwise, follow the full flow.
+
+#### Review mode: shortened per-ticket flow
+
+1. **Create a feature branch** (if not already on one):
+   ```bash
+   git checkout -b feat/<ticket-id>-<short-description>
+   ```
+
+2. **INVESTIGATING** — same as normal:
+   - Read ticket description and ACs from Linear
+   - Explore codebase: 5 questions (similar features, types, utilities, state, constraints)
+   - Post investigation comment on the ticket
+   - Record: `powr-workmaxxing gate record investigation --ticket <ticket-id> --evidence '{"commentUrl":"..."}'`
+
+3. **IMPLEMENTING** — write code but do NOT commit:
+   - Write code following investigation findings
+   - Stage changes with `git add` (hooks block `git commit` in review mode)
+
+4. **Post summary comment** on the ticket listing what was implemented and where
+
+5. **Tell the user:**
+   > "Changes staged on branch `feat/<ticket-id>-<short-description>`. Please review the diff, commit, and create a PR. Mark the ticket as Done when merged."
+
+6. **STOP** — do not mark Done, do not run CodeRabbit, do not cross-reference. The human's PR review replaces these gates.
+
+#### Full per-ticket flow (review mode OFF)
 
 #### 1. INVESTIGATING
 - Read ticket description and ACs from Linear

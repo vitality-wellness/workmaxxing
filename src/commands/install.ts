@@ -90,6 +90,16 @@ const POWR_HOOKS = {
         {
           type: "command",
           command:
+            '"$CLAUDE_PROJECT_DIR"/.claude/hooks/powr-hook.sh block-commit',
+        },
+      ],
+    },
+    {
+      matcher: "Bash",
+      hooks: [
+        {
+          type: "command",
+          command:
             '"$CLAUDE_PROJECT_DIR"/.claude/hooks/powr-hook.sh merge-coordination',
         },
       ],

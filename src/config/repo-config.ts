@@ -12,11 +12,12 @@ export interface RepoConfig {
   productionPaths: string[];
   analyzeCommand: string | null;
   restartCommand: string | null;
+  reviewMode?: boolean;
 }
 
 type RepoConfigMap = Record<string, RepoConfig>;
 
-const CONFIG_PATH = join(homedir(), ".powr", "repos.json");
+export const CONFIG_PATH = join(homedir(), ".powr", "repos.json");
 
 const DEFAULTS: RepoConfigMap = {
   "powr-frontend": {
@@ -84,6 +85,41 @@ export function getRepoConfig(repoPath: string): RepoConfig | null {
   }
 
   return null;
+}
+
+/**
+ * Find the config key that matches a repo path.
+ */
+export function getRepoConfigKey(repoPath: string): string | null {
+  const configs = loadRepoConfigs();
+
+  if (configs[repoPath]) return repoPath;
+
+  for (const key of Object.keys(configs)) {
+    if (repoPath.endsWith(key) || repoPath.endsWith(`/${key}`)) {
+      return key;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Set a field on a repo's config and write back to disk.
+ */
+export function setRepoConfigField(
+  repoPath: string,
+  field: string,
+  value: unknown
+): boolean {
+  const configs = loadRepoConfigs();
+  const key = getRepoConfigKey(repoPath);
+  if (!key || !configs[key]) return false;
+
+  (configs[key] as unknown as Record<string, unknown>)[field] = value;
+  writeFileSync(CONFIG_PATH, JSON.stringify(configs, null, 2));
+  cachedConfig = configs;
+  return true;
 }
 
 /**
