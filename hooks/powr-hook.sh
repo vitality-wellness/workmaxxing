@@ -308,7 +308,7 @@ handle_enforce_gates() {
   if command -v powr-workmaxxing &>/dev/null; then
     GATE_LIST=$(powr-workmaxxing gate list-ticket-gates 2>/dev/null || echo "ticket_in_progress investigation code_committed coderabbit_review findings_crossreferenced findings_resolved acceptance_criteria")
   else
-    GATE_LIST="ticket_in_progress investigation code_committed coderabbit_review findings_crossreferenced findings_resolved acceptance_criteria"
+    GATE_LIST="ticket_in_progress investigation code_committed coderabbit_review"
   fi
   for GATE in $GATE_LIST; do
     local PASSED

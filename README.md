@@ -12,7 +12,7 @@ That's it. Say the word, Claude handles the rest.
 
 AI coding agents are fast but sloppy. Left unchecked, Claude will skip investigation, write code without understanding context, commit without review, and mark tickets done with half the acceptance criteria unverified. Telling it "please be thorough" in a system prompt doesn't work — it agrees, then cuts corners anyway. And you shouldn't have to paste the same 20-line prompt every session reminding it to investigate before coding, run code review after committing, and cross-reference findings with existing tickets.
 
-workmaxxing fixes this with **gates** — hard checkpoints that mechanically block progress until real work is done. Not instructions. Not suggestions. Actual PreToolUse hooks that deny tool calls if gates aren't passed. Claude can't mark a ticket Done without passing all 7 gates. It can't edit production code without investigating first. It can't skip code review. The enforcement lives in hooks and SQLite, not in prose.
+workmaxxing fixes this with **gates** — hard checkpoints that mechanically block progress until real work is done. Not instructions. Not suggestions. Actual PreToolUse hooks that deny tool calls if gates aren't passed. Claude can't mark a ticket Done without passing all 4 gates. It can't edit production code without investigating first. It can't skip code review. The enforcement lives in hooks and SQLite, not in prose.
 
 ## Why Linear
 
@@ -28,6 +28,7 @@ It also gives you a paper trail. Every investigation, code review, and verificat
 - [Claude Code](https://claude.com/claude-code) — the CLI
 - [Linear MCP plugin](https://linear.app) — ticket creation, status updates, comments. The entire workflow runs through Linear.
 - Node.js 20+
+- Your Linear team must have these workflow statuses: **In Progress**, **In Review**, **In Human Review**, **Blocked: Manual Action**, **Done**. Most teams have "In Progress", "In Review", and "Done" by default — you'll need to add **In Human Review** and **Blocked: Manual Action** under Settings → Teams → [your team] → Workflow states.
 
 **Recommended:**
 - [CodeRabbit](https://coderabbit.ai) Claude Code plugin — automated code review. If not installed, Claude does a self-review instead (less thorough but still enforced as a gate).
@@ -47,6 +48,30 @@ Then in any repo:
 ```bash
 cd ~/my-project
 powr-workmaxxing install
+```
+
+### Review mode
+
+Don't want Claude committing and closing tickets? Turn on review mode — Claude writes the code but you handle the git workflow.
+
+```bash
+powr-workmaxxing repo set reviewMode true
+```
+
+When review mode is on, `/powr execute` changes:
+
+1. Claude creates a feature branch (`feat/<ticket-id>-<short-description>`)
+2. Investigates and writes code — same as normal
+3. Stages changes with `git add` — **commits are blocked by hooks**
+4. Runs CodeRabbit review on the staged changes, fixes issues
+5. Sets the ticket to "In Human Review"
+6. Stops — **does not commit**
+
+You take it from there: review the diff, commit, create a PR, merge, mark Done. CodeRabbit has already reviewed, so your PR review is the human layer on top.
+
+```bash
+powr-workmaxxing repo set reviewMode false   # turn it off
+powr-workmaxxing repo info                   # check current setting
 ```
 
 ---
@@ -90,7 +115,7 @@ You:    /powr plan
 
 Claude picks up the spec you wrote, checks what's already planned in Linear, explores the codebase, and writes a step-by-step implementation plan.
 
-Then it walks you through a 5-section review:
+Then it presents a 5-section review in a single message:
 
 1. **Architecture** — component boundaries right?
 2. **Code quality** — DRY violations, missing error handling, edge cases?
@@ -98,7 +123,7 @@ Then it walks you through a 5-section review:
 4. **Performance** — N+1 queries, memory, caching?
 5. **Ticket decomposition** — do the steps break into clean tickets?
 
-For each issue it finds, it gives you options and a recommendation. You pick. After all 5 sections pass, it creates Linear tickets automatically — with dependencies, estimates, labels, and acceptance criteria. A ticket is **always** created, even for small single-ticket features. No skipping, no placeholder IDs.
+For each section, Claude presents its findings and a recommendation. You can approve all at once or flag specific sections for discussion. After all 5 pass, it creates Linear tickets automatically — with dependencies, estimates, labels, and acceptance criteria. A ticket is **always** created, even for small single-ticket features. No skipping, no placeholder IDs.
 
 Before creating each ticket, it checks Linear across **all statuses** — done, in progress, in review, todo, backlog, canceled. No duplicates, no re-doing finished work.
 
@@ -115,7 +140,7 @@ You:    /powr execute cycle "Sprint 12"        ← all tickets in a cycle
 You:    /powr execute project "MVP Launch"     ← all tickets in a project
 ```
 
-**Single ticket:** Claude sets the ticket to In Progress (auto-records the `ticket_in_progress` gate), investigates the codebase, implements, commits (auto-records `code_committed` with the real SHA), runs code review, cross-references findings against ALL existing tickets (every project, backlog, future — not just current cycle), fixes issues, verifies acceptance criteria, notes what it unblocks, and marks it done. Seven quality gates per ticket — it can't skip any of them.
+**Single ticket:** Claude sets the ticket to In Progress (auto-records the `ticket_in_progress` gate), investigates the codebase, implements, commits (auto-records `code_committed` with the real SHA), runs CodeRabbit review (sets ticket to "In Review"), then after review completes sets it to "In Human Review" for you to verify. Four quality gates per ticket — it can't skip any of them. Tickets stay in "In Human Review" until you ship.
 
 **Batch:** Claude builds a dependency graph, groups independent tickets into waves, and runs each wave in parallel worktrees. It shows you the plan:
 
@@ -136,46 +161,19 @@ You approve. It launches. Wave 1 finishes, merges to main, wave 2 starts. You ap
 
 **When it's done:** "All tickets complete. Type `/powr ship` to wrap up."
 
-### Step 4: `/powr ship` — verify and close
+### Step 4: `/powr ship` — verify, mark done, and close
 
 ```
 You:    /powr ship
 ```
 
-Claude verifies **every ticket passed through all 7 gates** — ticket in progress, investigation, code committed, code review, cross-reference, fix findings, verify ACs. If any ticket skipped a gate or isn't in DONE, it stops and tells you what's missing. Nothing ships until everything checks out.
+Claude verifies **every ticket passed through all 4 gates** — ticket in progress, investigation, code committed, code review. Tickets should be in "In Human Review" status. If any ticket skipped a gate, it stops and tells you what's missing. Nothing ships until everything checks out.
 
-Then it audits the ticket landscape — orphaned tickets, open sub-issues, in-progress work that should have been completed, planned vs actually built. It runs static analysis, verifies everything is committed, and gives you a summary.
+Then it audits the ticket landscape — orphaned tickets, in-progress work that should have been completed, planned vs actually built. It runs static analysis and verifies everything is committed.
 
-The plan file is cleaned up after shipping — tickets are the historical record.
+Once verified, Claude **marks all tickets as Done** in Linear. This is when tickets officially close — after you've had a chance to review the "In Human Review" tickets. It posts a summary and cleans up the plan file.
 
 **When it's done:** "Workflow complete." That's it. Start the next one whenever you want.
-
----
-
-## Review mode
-
-Don't want Claude committing and marking tickets Done? Turn on review mode — Claude writes the code but you handle the git workflow.
-
-```bash
-powr-workmaxxing repo set reviewMode true
-```
-
-When review mode is on, `/powr execute` changes:
-
-1. Claude creates a feature branch (`feat/<ticket-id>-<short-description>`)
-2. Investigates and writes code — same as normal
-3. Stages changes with `git add` — **commits are blocked by hooks**
-4. Posts a summary comment on the ticket
-5. Stops — **does not mark the ticket Done**
-
-You take it from there: review the diff, commit, create a PR, merge, mark Done.
-
-CodeRabbit review, cross-referencing, and findings resolution are skipped — your PR review replaces those gates.
-
-```bash
-powr-workmaxxing repo set reviewMode false   # turn it off
-powr-workmaxxing repo info                   # check current setting
-```
 
 ---
 
@@ -250,10 +248,11 @@ You also need hooks in `.claude/settings.local.json`:
 
 ## Quality gates
 
-Every ticket goes through 7 mandatory gates, scoped per-ticket:
+Every ticket goes through 4 mandatory gates, scoped per-ticket:
 
 ```
-IN PROGRESS → INVESTIGATE → IMPLEMENT → CODE REVIEW → CROSS-REF → FIX → VERIFY ACs → DONE
+IN PROGRESS → INVESTIGATE → IMPLEMENT → CODE REVIEW ("In Review") → "In Human Review" → Done (at ship)
+                                                                  ↘ "Blocked: Manual Action" (if non-code work needed)
 ```
 
 | Gate | What happens | Enforced by |
@@ -262,9 +261,8 @@ IN PROGRESS → INVESTIGATE → IMPLEMENT → CODE REVIEW → CROSS-REF → FIX 
 | **Investigation** | Explore codebase, post findings | Edit/Write blocked on production files until posted |
 | **Code committed** | Implement + commit | **Auto-records** via `post-commit` hook with real SHA |
 | **Code review** | CodeRabbit review (or Claude self-review if CodeRabbit not installed) | Post-commit hook repeats until satisfied |
-| **Cross-reference** | Classify findings vs ALL existing tickets | Comment auto-records gate (ticket-scoped) |
-| **Fix findings** | Address "Must Fix Now" items | Auto-passes if none exist |
-| **Acceptance criteria** | Verify each AC | Auto-passes if no explicit ACs |
+
+When code review starts, Claude sets the ticket to **"In Review"**. After review completes, it moves to **"In Human Review"** — signaling it's waiting on a person. Marking Done happens during the ship phase.
 
 Gates are **ticket-scoped** — ticket A's gates don't satisfy ticket B's Done check. Evidence is validated: spec/plan gates require real file paths, `code_committed` requires a valid commit SHA, `all_tickets_done` checks that every ticket_workflow is in DONE.
 
@@ -285,15 +283,7 @@ Gates record automatically from Linear comment headings:
 
 | Comment contains | Gate |
 |---|---|
-| "Investigation Findings" | `investigation` |
-| "Code Review Findings" | `findings_crossreferenced` |
-| "Code Review Findings" + "Resolved" | `findings_resolved` |
-| "Acceptance Criteria Verification" + "ALL CRITERIA PASSED" | `acceptance_criteria` |
-
-### Auto-pass rules
-
-- No "Must Fix Now" items → `findings_resolved` auto-passes
-- No explicit ACs in description → `acceptance_criteria` auto-passes
+| "## Investigation" or "Investigation Findings" | `investigation` |
 
 ---
 
@@ -308,9 +298,8 @@ Claude checks the full Linear landscape at 8 points in the workflow:
 | **Ticket creation** | All statuses: duplicates, done work, active work, planned work. Extend or link instead of duplicating. |
 | **Investigation** | Project context. What was just built. What's coming next. |
 | **Implementation** | Future tickets touching same files. Parallel worktree conflicts. |
-| **Cross-reference** | ALL tickets (every project, backlog, future) for existing coverage. |
 | **Completion** | What this unblocks. |
-| **Ship** | All gates passed per ticket. Orphaned tickets. Unresolved sub-tickets. Skipped reviews. Planned vs built. |
+| **Ship** | All gates passed per ticket. Orphaned tickets. In-progress work. Planned vs built. Marks tickets Done. |
 
 ---
 
@@ -384,8 +373,10 @@ You ←→ Claude Code
 
 ```
 Feature:  SPECCING → PLANNING → REVIEWING → TICKETING → EXECUTING → SHIPPING → IDLE
-Ticket:   QUEUED → INVESTIGATING → IMPLEMENTING → CODE_REVIEWING → CROSS_REFING → FIXING → VERIFYING_ACS → DONE
+Ticket:   QUEUED → INVESTIGATING → IMPLEMENTING → CODE_REVIEWING → DONE
 ```
+
+During CODE_REVIEWING, tickets are "In Review". After review, they move to "In Human Review". During SHIPPING, they're marked Done.
 
 Declarative config. Zod-typed gate evidence. Can't skip or go backwards.
 
@@ -440,7 +431,10 @@ powr-workmaxxing
 
   gate record <name> [--ticket] [--evidence]  Record a gate (ticket-scoped)
   gate check <name>                   Check gate (exit code)
+  gate check-ticket <id>              Check all ticket gates at once
   gate list [--json]                  Gates for current stage
+  gate list-ticket-gates              Print ticket gate names (for scripts)
+  gate schema [name]                  Show expected evidence format
   gate detect --text "..."            Auto-detect from comment
   gate next                           Next mandatory action
 

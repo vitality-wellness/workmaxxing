@@ -10,6 +10,7 @@ import { validateGateEvidence, GATE_EVIDENCE_EXAMPLES } from "../engine/state-ma
 import { resolveWorkflow, requireWorkflow } from "../resolve-workflow.js";
 import { detectGatesFromComment } from "../engine/gate-detection.js";
 import { getNextDirective, getDirectiveForGate } from "../engine/directives.js";
+import { getRepoConfig } from "../config/repo-config.js";
 
 /** Maps ticket-scoped gates to the ticket stage they advance to (derived from config) */
 const GATE_NEXT_STAGE = deriveGateNextStage();
@@ -436,6 +437,8 @@ gateCommand
     }
 
     const passedGates = gates.getPassedNames(workflow.id);
+    const repoConfig = getRepoConfig(workflow.repo);
+    const reviewMode = repoConfig?.reviewMode === true;
 
     // Determine level based on stage
     const isTicketLevel = [
@@ -445,7 +448,8 @@ gateCommand
 
     const directive = getNextDirective(
       passedGates,
-      isTicketLevel ? "ticket" : "feature"
+      isTicketLevel ? "ticket" : "feature",
+      reviewMode
     );
 
     if (directive) {

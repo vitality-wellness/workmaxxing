@@ -81,23 +81,8 @@ const TICKET_STAGES: Record<string, StageConfig> = {
     nextStage: "CODE_REVIEWING",
   },
   CODE_REVIEWING: {
-    description: "Running CodeRabbit review",
+    description: "Running CodeRabbit review, then handing off to human",
     requiredGates: ["coderabbit_review"],
-    nextStage: "CROSS_REFING",
-  },
-  CROSS_REFING: {
-    description: "Cross-referencing findings with existing Linear tickets",
-    requiredGates: ["findings_crossreferenced"],
-    nextStage: "FIXING",
-  },
-  FIXING: {
-    description: "Fixing 'Must Fix Now' items from review",
-    requiredGates: ["findings_resolved"],
-    nextStage: "VERIFYING_ACS",
-  },
-  VERIFYING_ACS: {
-    description: "Verifying acceptance criteria",
-    requiredGates: ["acceptance_criteria"],
     nextStage: "DONE",
   },
   DONE: {

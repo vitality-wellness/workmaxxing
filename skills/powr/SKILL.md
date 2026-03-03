@@ -156,50 +156,31 @@ Create an implementation plan, review it, then decompose into Linear tickets.
 
 ### Phase 2: Interactive Review
 
-**CRITICAL: You MUST actually review the plan with the user. Do NOT self-approve. Do NOT batch-record all gates. Each section requires a real conversation.**
+**CRITICAL: You MUST actually review the plan with the user. Do NOT self-approve. Do NOT batch-record all gates.**
 
-Go through 5 sections, one at a time. For each section:
-1. Analyze the plan for issues in that area
-2. Present findings with numbered issues and lettered options (recommended first)
-3. Use AskUserQuestion to get the user's choice
-4. Only after the user approves that section, record the gate
+Present all 5 review sections in a **single message**. For each section, analyze the plan and present your findings (issues, concerns, or "no issues found"). Then ask the user to approve all at once or flag specific sections for discussion.
 
-**Section 1: Architecture**
-- Component boundaries, coupling, data flow, security
-- Present issues → user picks options → then record:
+**Section 1: Architecture** — Component boundaries, coupling, data flow, security
+
+**Section 2: Code Quality** — DRY violations, error handling, edge cases, over/under-engineering
+
+**Section 3: Tests** — Coverage gaps, assertion quality, failure modes
+
+**Section 4: Performance** — N+1 queries, memory, caching, complexity
+
+**Section 5: Ticket Decomposition** — Clean boundaries, dependency ordering, AC clarity, scope
+
+After presenting all 5, ask: "Approve all sections, or flag any for discussion?"
+
+- If the user approves all, record all 5 gates:
   ```bash
-  powr-workmaxxing gate record review_architecture --evidence '{"approved":true}'
-  ```
-
-**Section 2: Code Quality**
-- DRY violations, error handling, edge cases, over/under-engineering
-- Present issues → user picks → then record:
-  ```bash
-  powr-workmaxxing gate record review_code_quality --evidence '{"approved":true}'
-  ```
-
-**Section 3: Tests**
-- Coverage gaps, assertion quality, failure modes
-- Present issues → user picks → then record:
-  ```bash
-  powr-workmaxxing gate record review_tests --evidence '{"approved":true}'
-  ```
-
-**Section 4: Performance**
-- N+1 queries, memory, caching, complexity
-- Present issues → user picks → then record:
-  ```bash
-  powr-workmaxxing gate record review_performance --evidence '{"approved":true}'
-  ```
-
-**Section 5: Ticket Decomposition**
-- Clean boundaries, dependency ordering, AC clarity, scope
-- Present issues → user picks → then record:
-  ```bash
+  powr-workmaxxing gate record review_architecture --evidence '{"approved":true}' && \
+  powr-workmaxxing gate record review_code_quality --evidence '{"approved":true}' && \
+  powr-workmaxxing gate record review_tests --evidence '{"approved":true}' && \
+  powr-workmaxxing gate record review_performance --evidence '{"approved":true}' && \
   powr-workmaxxing gate record review_ticket_decomposition --evidence '{"approved":true}'
   ```
-
-**If a section has no issues:** still present it to the user — "Section 3 (Tests): No issues found. The plan includes tests for X, Y, Z. Approve?" Then record after they confirm.
+- If the user flags specific sections, discuss those sections, then record gates for the approved ones. Repeat until all 5 are approved.
 
 ### Phase 3: Ticket Creation
 
@@ -271,12 +252,12 @@ If `reviewMode` is `true`, the workflow changes:
 2. Do investigation as normal (post findings to Linear)
 3. Write code as normal
 4. **Stage changes** (`git add`) but do NOT commit — hooks will block this
-5. **Do NOT mark ticket as Done** — hooks will block this
-6. **Post a summary comment** on the ticket listing what was implemented
+5. Set ticket to **"In Review"** in Linear, run CodeRabbit review on staged changes, fix issues
+6. Set ticket to **"In Human Review"** in Linear
 7. **Tell the user:**
-   > "Changes staged on branch `feat/<ticket-id>-<short-description>`. Please review the diff, commit, and create a PR. Mark the ticket as Done when merged."
+   > "Changes staged on branch `feat/<ticket-id>-<short-description>`. CodeRabbit review complete. Please review the diff, commit, and create a PR."
 
-In review mode, skip CodeRabbit review (requires a commit), cross-referencing, and findings resolution. The human's PR review replaces these gates.
+In review mode, the human reviews on top of CodeRabbit's automated review, then commits and creates a PR.
 
 ### Resolving scope
 
@@ -325,6 +306,10 @@ Project: {PROJECT_NAME}
 
 IMPORTANT: You are in a worktree — always pass `-w {WORKFLOW_ID}` on every powr-workmaxxing command.
 
+IMPORTANT: If at any point you determine this ticket requires a non-code human action you cannot perform
+(e.g., obtaining an API key, configuring an external service, physical setup), post a comment explaining
+what's needed, set the ticket to "Blocked: Manual Action", and output: "TICKET_BLOCKED: {TICKET_ID}".
+
 ## Step 1: Mark In Progress
 mcp__plugin_linear_linear__save_issue({ id: "{TICKET_ID}", state: "In Progress" })
 powr-workmaxxing gate record ticket_in_progress -w {WORKFLOW_ID} --ticket {TICKET_ID} --evidence '{}'
@@ -346,37 +331,17 @@ powr-workmaxxing gate record ticket_in_progress -w {WORKFLOW_ID} --ticket {TICKE
   powr-workmaxxing gate record code_committed -w {WORKFLOW_ID} --ticket {TICKET_ID} --evidence '{"commitSha":"<sha>"}'
 
 ## Step 4: CODE_REVIEWING
+- Set ticket to "In Review" in Linear:
+  mcp__plugin_linear_linear__save_issue({ id: "{TICKET_ID}", state: "In Review" })
 - If /coderabbit:review skill is available, run it. Otherwise, perform a thorough self-review:
   read every changed file, check for bugs, edge cases, security issues, style violations.
 - Post review comment on ticket
 - Record gate:
   powr-workmaxxing gate record coderabbit_review -w {WORKFLOW_ID} --ticket {TICKET_ID} --evidence '{"reviewUrl":"<url>"}'
 
-## Step 5: CROSS_REFING
-- Search ALL tickets for related work:
-  mcp__plugin_linear_linear__list_issues({ query: "<finding keywords>", team: "POWR", limit: 50 })
-  mcp__plugin_linear_linear__list_issues({ state: "backlog", team: "POWR" })
-- Classify findings: "Must Fix Now" vs "Covered by existing ticket" vs "Recurring pattern"
-- Post cross-reference comment on ticket
-- Record gate:
-  powr-workmaxxing gate record findings_crossreferenced -w {WORKFLOW_ID} --ticket {TICKET_ID} --evidence '{"commentUrl":"<url>"}'
-
-## Step 6: FIXING
-- Fix all "Must Fix Now" items from cross-referencing
-- Post resolution comment on ticket
-- Record gate:
-  powr-workmaxxing gate record findings_resolved -w {WORKFLOW_ID} --ticket {TICKET_ID} --evidence '{"commentUrl":"<url>"}'
-
-## Step 7: VERIFYING_ACS
-- Extract ACs from ticket description
-- Verify each AC against the implementation
-- Post verification comment on ticket
-- Record gate:
-  powr-workmaxxing gate record acceptance_criteria -w {WORKFLOW_ID} --ticket {TICKET_ID} --evidence '{"commentUrl":"<url>"}'
-
 ## Completion
-- Mark ticket Done in Linear:
-  mcp__plugin_linear_linear__save_issue({ id: "{TICKET_ID}", state: "Done" })
+- Set ticket to "In Human Review" in Linear (NOT Done — the human will review and mark Done during shipping):
+  mcp__plugin_linear_linear__save_issue({ id: "{TICKET_ID}", state: "In Human Review" })
 - Output: "TICKET_DONE: {TICKET_ID}"
 ```
 
@@ -388,10 +353,10 @@ After all agents in a wave complete, verify every ticket passed all gates:
 powr-workmaxxing gate check-ticket {TICKET_ID} -w {WORKFLOW_ID} --json
 ```
 
-Run this for each ticket in the wave. If any ticket has missing gates:
-1. Report which tickets failed and which gates are missing
-2. Ask the user how to proceed (retry, skip, or abort)
-3. Do NOT merge until the user decides
+Run this for each ticket in the wave.
+- **Blocked tickets** (output "TICKET_BLOCKED"): report to the user which tickets need manual action and why. These are excluded from merge — the human handles them separately.
+- **Failed tickets** (missing gates): report which tickets failed and which gates are missing. Ask the user how to proceed (retry, skip, or abort).
+- Do NOT merge until the user decides on any failures.
 
 #### Step 6 — Merge verified worktrees
 
@@ -431,7 +396,7 @@ mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Progress" 
 
 **If review mode is ON**, follow the shortened flow below. Otherwise, follow the full flow.
 
-#### Review mode: shortened per-ticket flow
+#### Review mode: per-ticket flow
 
 1. **Create a feature branch** (if not already on one):
    ```bash
@@ -447,13 +412,34 @@ mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Progress" 
 3. **IMPLEMENTING** — write code but do NOT commit:
    - Write code following investigation findings
    - Stage changes with `git add` (hooks block `git commit` in review mode)
+   - Record gate manually with HEAD (no commit to auto-record from):
+     `powr-workmaxxing gate record code_committed --ticket <ticket-id> --evidence '{"commitSha":"'$(git rev-parse HEAD)'"}'`
 
-4. **Post summary comment** on the ticket listing what was implemented and where
+4. **CODE_REVIEWING** — set ticket to "In Review", run `/coderabbit:review` on the staged changes. Post review comment on ticket. Fix any issues found, re-stage.
+   - Record: `powr-workmaxxing gate record coderabbit_review --ticket <ticket-id> --evidence '{"reviewUrl":"..."}'`
 
-5. **Tell the user:**
-   > "Changes staged on branch `feat/<ticket-id>-<short-description>`. Please review the diff, commit, and create a PR. Mark the ticket as Done when merged."
+5. **Set ticket to "In Human Review"** in Linear:
+   ```
+   mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Human Review" })
+   ```
 
-6. **STOP** — do not mark Done, do not run CodeRabbit, do not cross-reference. The human's PR review replaces these gates.
+6. **Tell the user:**
+   > "Changes staged on branch `feat/<ticket-id>-<short-description>`. CodeRabbit review complete. Please review the diff, commit, and create a PR."
+
+7. **STOP** — do not commit. The human reviews, commits, creates a PR, and merges.
+
+#### Blocked: Manual Action
+
+At any point during a ticket — investigation, implementation, or review — if you determine the ticket **requires a non-code human action** that you cannot perform (e.g., obtaining an API key from a third-party website, configuring an external dashboard, signing up for a service, physical device setup), do the following:
+
+1. **Post a comment** on the ticket explaining exactly what manual action is needed, with step-by-step instructions if possible
+2. **Set the ticket to "Blocked: Manual Action"**:
+   ```
+   mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "Blocked: Manual Action" })
+   ```
+3. **Move on to the next ticket** — do not wait. The human will complete the manual action and move the ticket back to "Todo" or "In Progress" when ready.
+
+During batch execution, tickets set to "Blocked: Manual Action" are excluded from the `all_tickets_done` check — they're handled separately by the human.
 
 #### Full per-ticket flow (review mode OFF)
 
@@ -474,38 +460,22 @@ mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Progress" 
 - Commit changes (the `code_committed` gate auto-records via post-commit hook with the real SHA)
 
 #### 3. CODE_REVIEWING
+- Set ticket to "In Review":
+  `mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Review" })`
 - Run `/coderabbit:review`
 - Record: `powr-workmaxxing gate record coderabbit_review --ticket <ticket-id> --evidence '{"reviewUrl":"..."}'`
 
-#### 4. CROSS_REFING
-- **Search ALL tickets** — every project, every cycle, backlog, future:
-  ```
-  mcp__plugin_linear_linear__list_issues({ query: "<finding keywords>", team: "POWR", limit: 50 })
-  mcp__plugin_linear_linear__list_issues({ state: "backlog", team: "POWR" })
-  ```
-- For each finding, check if ANY existing ticket covers it
-- Classify: "Must Fix Now" (no coverage) vs "Covered by POWR-450 (future)" vs "Recurring pattern"
-- Post cross-reference comment
-- Record: `powr-workmaxxing gate record findings_crossreferenced --ticket <ticket-id> --evidence '{"commentUrl":"..."}'`
-
-#### 5. FIXING
-- Fix all "Must Fix Now" items
-- Post resolution comment
-- Record: `powr-workmaxxing gate record findings_resolved --ticket <ticket-id> --evidence '{"commentUrl":"..."}'`
-
-#### 6. VERIFYING_ACS
-- Extract ACs from ticket
-- Verify each AC
-- Post verification comment
-- Record: `powr-workmaxxing gate record acceptance_criteria --ticket <ticket-id> --evidence '{"commentUrl":"..."}'`
-
-#### 7. DONE
+#### 4. HAND OFF TO HUMAN
 - **Check what this unblocks:**
   ```
   mcp__plugin_linear_linear__get_issue({ id: "<id>", includeRelations: true })
   ```
   Note in completion comment: "Unblocks POWR-503, POWR-504."
-- Mark ticket Done in Linear
+- Set ticket to **"In Human Review"** in Linear (NOT Done):
+  ```
+  mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Human Review" })
+  ```
+- The human will cross-reference findings, verify ACs, and mark Done during the shipping phase
 
 ### Completion
 
@@ -519,7 +489,7 @@ Output: EXECUTE_TICKET_DONE
 
 ## /powr ship
 
-Final verification and workflow completion. **Nothing ships until everything checks out.**
+Final verification, marking tickets Done, and workflow completion. **Nothing ships until everything checks out.**
 
 ### 1. Verify every ticket completed all gates
 
@@ -528,14 +498,14 @@ powr-workmaxxing status --repo "$CLAUDE_PROJECT_DIR" --json
 ```
 
 For **each ticket** in the workflow, verify it passed through every stage:
+- `ticket_in_progress` — ticket marked In Progress
 - `investigation` — codebase explored, questions answered
 - `code_committed` — implementation committed
 - `coderabbit_review` — CodeRabbit review ran
-- `findings_crossreferenced` — findings cross-referenced with existing Linear tickets
-- `findings_resolved` — "Must Fix Now" items resolved
-- `acceptance_criteria` — ACs verified against the ticket
 
-If any ticket is **not in DONE** or skipped a gate, stop and flag it to the user. Don't proceed until resolved — either complete the missing work or get explicit user approval to ship without it.
+Tickets should be in "In Human Review" status in Linear. If any ticket skipped a gate, stop and flag it to the user. Don't proceed until resolved — either complete the missing work or get explicit user approval to ship without it.
+
+Tickets in **"Blocked: Manual Action"** are reported separately — they need human intervention before they can ship.
 
 ### 2. Audit the ticket landscape
 
@@ -543,9 +513,9 @@ If any ticket is **not in DONE** or skipped a gate, stop and flag it to the user
 mcp__plugin_linear_linear__list_issues({ project: "<project>", team: "POWR" })
 ```
 Check for:
+- **Blocked tickets** — anything in "Blocked: Manual Action" that still needs human intervention
 - **Orphaned tickets** — created during planning but never executed
-- **Open sub-tickets** — from CodeRabbit findings or cross-referencing that weren't resolved
-- **In Review / In Progress tickets** — anything still mid-flight that should have been completed
+- **In Progress tickets** — anything still mid-flight that should have been completed
 - **Planned vs actually built** — compare the original plan against what was delivered
 
 Report all findings before proceeding. The user decides what to do with gaps.
@@ -560,21 +530,30 @@ powr-workmaxxing repo analyze
 
 No uncommitted or unstaged work. Run `git status` and confirm clean.
 
-### 5. Post summary
+### 5. Mark all tickets as Done
+
+For **each ticket** in the workflow that is currently "In Human Review":
+```
+mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "Done" })
+```
+
+This is when tickets officially close — after the human has had a chance to review them.
+
+### 6. Post summary
 
 - What was built (link to tickets)
 - Planned vs completed — anything deferred?
 - Open questions or follow-up work
 - Deferred items (create backlog tickets if needed)
 
-### 6. Clean up the plan file
+### 7. Clean up the plan file
 
 The feature is shipped, tickets are the historical record:
 ```bash
 rm .claude/plans/<name>.md
 ```
 
-### 7. Complete
+### 8. Complete
 
 ```bash
 powr-workmaxxing gate record ship_verified --evidence '{"verified":true}'

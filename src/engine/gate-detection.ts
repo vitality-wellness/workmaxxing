@@ -22,35 +22,6 @@ const DETECTION_RULES: DetectionRule[] = [
     // Match "## Investigation", "Investigation Findings", etc.
     patterns: [/##\s*investigation|investigation\s+findings/i],
   },
-  {
-    gate: "findings_crossreferenced",
-    // Match "## Cross-Reference", "Code Review Findings (CodeRabbit)", etc.
-    patterns: [/cross[- ]?referenc|code\s+review\s+findings\s*\(?\s*coderabbit\s*\)?/i],
-    autoPass: [
-      {
-        gate: "findings_resolved",
-        unless: /must\s+fix\s+now/i, // Only auto-pass if NO "Must Fix Now"
-      },
-    ],
-  },
-  {
-    gate: "findings_resolved",
-    patterns: [/code\s+review\s+findings/i, /resolved/i],
-  },
-  {
-    gate: "acceptance_criteria",
-    // Match "## AC Verification", "Acceptance Criteria Verification", etc.
-    // AND "All Pass", "All Criteria Passed", "ALL ACs PASS", etc.
-    patterns: [
-      /(?:acceptance\s+criteria|AC)\s+verif|##\s*AC\s+verif/i,
-      /all\s+(?:criteria\s+)?pass|all\s+ACs?\s+pass/i,
-    ],
-  },
-  {
-    // Auto-pass: no explicit ACs
-    gate: "acceptance_criteria",
-    patterns: [/no\s+explicit\s+acceptance\s+criteria/i],
-  },
 ];
 
 /**

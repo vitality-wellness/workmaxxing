@@ -23,10 +23,11 @@ describe("workflow config", () => {
     expect(names).toContain("INVESTIGATING");
     expect(names).toContain("IMPLEMENTING");
     expect(names).toContain("CODE_REVIEWING");
-    expect(names).toContain("CROSS_REFING");
-    expect(names).toContain("FIXING");
-    expect(names).toContain("VERIFYING_ACS");
     expect(names).toContain("DONE");
+    // Removed stages (human handles post-review):
+    expect(names).not.toContain("CROSS_REFING");
+    expect(names).not.toContain("FIXING");
+    expect(names).not.toContain("VERIFYING_ACS");
   });
 
   it("every stage has a description", () => {

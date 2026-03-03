@@ -23,9 +23,6 @@ export const GATE_EVIDENCE_EXAMPLES: Record<string, string> = {
   investigation: '{"commentUrl": "optional"}',
   code_committed: '{"commitSha": "abc1234"}',
   coderabbit_review: '{"reviewUrl": "optional"}',
-  findings_crossreferenced: '{"commentUrl": "optional"}',
-  findings_resolved: '{"commentUrl": "optional"}',
-  acceptance_criteria: '{"commentUrl": "optional"}',
 };
 
 /** Evidence schemas for each gate. Gates not listed here accept any evidence. */
@@ -45,15 +42,6 @@ const GATE_EVIDENCE_SCHEMAS: Record<string, z.ZodType> = {
   code_committed: z.object({ commitSha: z.string() }).passthrough(),
   coderabbit_review: z
     .object({ reviewUrl: z.string().optional() })
-    .passthrough(),
-  findings_crossreferenced: z
-    .object({ commentUrl: z.string().optional() })
-    .passthrough(),
-  findings_resolved: z
-    .object({ commentUrl: z.string().optional() })
-    .passthrough(),
-  acceptance_criteria: z
-    .object({ commentUrl: z.string().optional() })
     .passthrough(),
 };
 

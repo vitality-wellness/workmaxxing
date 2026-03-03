@@ -47,10 +47,7 @@ describe("validateTransition", () => {
     expect(validateTransition(ticketStages, "QUEUED", "INVESTIGATING").valid).toBe(true);
     expect(validateTransition(ticketStages, "INVESTIGATING", "IMPLEMENTING").valid).toBe(true);
     expect(validateTransition(ticketStages, "IMPLEMENTING", "CODE_REVIEWING").valid).toBe(true);
-    expect(validateTransition(ticketStages, "CODE_REVIEWING", "CROSS_REFING").valid).toBe(true);
-    expect(validateTransition(ticketStages, "CROSS_REFING", "FIXING").valid).toBe(true);
-    expect(validateTransition(ticketStages, "FIXING", "VERIFYING_ACS").valid).toBe(true);
-    expect(validateTransition(ticketStages, "VERIFYING_ACS", "DONE").valid).toBe(true);
+    expect(validateTransition(ticketStages, "CODE_REVIEWING", "DONE").valid).toBe(true);
   });
 
   it("rejects skipping ticket stages", () => {
@@ -175,9 +172,6 @@ describe("getTransitionChain", () => {
       "INVESTIGATING",
       "IMPLEMENTING",
       "CODE_REVIEWING",
-      "CROSS_REFING",
-      "FIXING",
-      "VERIFYING_ACS",
       "DONE",
     ]);
   });

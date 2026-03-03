@@ -8,6 +8,8 @@ import { getWorkflowConfig } from "./workflow-config.js";
 interface GateDirective {
   gate: string;
   directive: string;
+  /** Alternative directive when review mode is enabled */
+  reviewDirective?: string;
 }
 
 /**
@@ -23,6 +25,8 @@ const TICKET_DIRECTIVES: GateDirective[] = [
     gate: "investigation",
     directive:
       "Implement the feature following your investigation findings. Commit when done. After commit, run /coderabbit:review.",
+    reviewDirective:
+      "Implement the feature following your investigation findings. Stage changes with `git add` but do NOT commit — the human will review and commit. Then run /coderabbit:review on staged changes.",
   },
   {
     gate: "code_committed",
@@ -31,30 +35,13 @@ const TICKET_DIRECTIVES: GateDirective[] = [
   {
     gate: "coderabbit_review",
     directive:
-      "MANDATORY: Cross-reference CodeRabbit findings with Linear tickets.\n" +
-      "1. List all tickets in the same project/cycle\n" +
-      "2. Classify each finding: 'Must Fix Now' or 'Covered by Future Tickets'\n" +
-      "3. Post a comment with '## Code Review Findings (CodeRabbit)'\n" +
-      "4. Create sub-tickets for each 'Must Fix Now' item",
-  },
-  {
-    gate: "findings_crossreferenced",
-    directive:
-      "Fix all 'Must Fix Now' items from the cross-reference. " +
-      "Post a resolution comment with '## Code Review Findings — Resolved'.",
-  },
-  {
-    gate: "findings_resolved",
-    directive:
-      "MANDATORY: Verify acceptance criteria.\n" +
-      "1. Extract ACs from ticket description\n" +
-      "2. Verify each criterion (PASS/FAIL)\n" +
-      "3. Post comment with '## Acceptance Criteria Verification' and 'ALL CRITERIA PASSED'",
-  },
-  {
-    gate: "acceptance_criteria",
-    directive:
-      "All gates passed. Commit final changes, mark ticket as Done in Linear.",
+      "Code review complete. Set ticket to 'In Human Review' in Linear:\n" +
+      "  mcp__plugin_linear_linear__save_issue({ id: \"<ticket-id>\", state: \"In Human Review\" })\n" +
+      "The human will review, cross-reference findings, verify ACs, and mark Done during shipping.",
+    reviewDirective:
+      "Code review complete. Set ticket to 'In Human Review' in Linear:\n" +
+      "  mcp__plugin_linear_linear__save_issue({ id: \"<ticket-id>\", state: \"In Human Review\" })\n" +
+      "REVIEW MODE: Changes are staged but not committed. The human will review the diff, commit, create a PR, and mark Done.",
   },
 ];
 
@@ -99,7 +86,8 @@ const FEATURE_DIRECTIVES: GateDirective[] = [
   },
   {
     gate: "all_tickets_done",
-    directive: "All tickets done. Use /ship for final verification.",
+    directive:
+      "All tickets ready for shipping. Use /powr ship to verify, mark tickets Done, and close out the workflow.",
   },
   {
     gate: "ship_verified",
@@ -107,13 +95,19 @@ const FEATURE_DIRECTIVES: GateDirective[] = [
   },
 ];
 
+/** Pick the right directive text based on review mode */
+function pickDirective(d: GateDirective, reviewMode: boolean): string {
+  return reviewMode && d.reviewDirective ? d.reviewDirective : d.directive;
+}
+
 /**
  * Get the directive for the next un-passed gate.
  * Returns null if all gates for the current stage are passed.
  */
 export function getNextDirective(
   passedGates: Set<string>,
-  level: "feature" | "ticket"
+  level: "feature" | "ticket",
+  reviewMode = false
 ): string | null {
   const directives =
     level === "feature" ? FEATURE_DIRECTIVES : TICKET_DIRECTIVES;
@@ -130,7 +124,7 @@ export function getNextDirective(
   // The directive to show is the one for the last passed gate
   // (it tells you what to do NEXT after that gate passed)
   if (lastPassedIndex >= 0) {
-    return directives[lastPassedIndex]!.directive;
+    return pickDirective(directives[lastPassedIndex]!, reviewMode);
   }
 
   // No gates passed yet — show the first required action
@@ -145,10 +139,12 @@ export function getNextDirective(
  */
 export function getDirectiveForGate(
   gateName: string,
-  level: "feature" | "ticket"
+  level: "feature" | "ticket",
+  reviewMode = false
 ): string | null {
   const directives =
     level === "feature" ? FEATURE_DIRECTIVES : TICKET_DIRECTIVES;
   const found = directives.find((d) => d.gate === gateName);
-  return found?.directive ?? null;
+  if (!found) return null;
+  return pickDirective(found, reviewMode);
 }
