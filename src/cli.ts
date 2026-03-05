@@ -12,6 +12,7 @@ import { auditCommand } from "./commands/audit.js";
 import { repoCommand } from "./commands/repo.js";
 import { installCommand } from "./commands/install.js";
 import { setupCommand } from "./commands/setup.js";
+import { modelSignalsCommand } from "./commands/model-signals.js";
 
 const program = new Command();
 
@@ -46,5 +47,8 @@ program.addCommand(installCommand);
 
 // Observability
 program.addCommand(auditCommand);
+
+// Signals
+program.addCommand(modelSignalsCommand);
 
 program.parse();
