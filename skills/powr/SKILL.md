@@ -7,7 +7,7 @@ allowed-tools: Bash, Agent, Read, Write, AskUserQuestion, mcp__plugin_linear_lin
 
 # /powr — Orchestrator
 
-Manages the workflow lifecycle by spawning specialized subagents. Content stays in subagent contexts; only file paths and brief summaries flow through here.
+Manages the workflow lifecycle by spawning specialized subagents. Each subagent posts its own findings directly to Linear as comments. Only ticket IDs and brief summaries flow through here.
 
 ## Decision Tree
 
@@ -30,14 +30,13 @@ Parse the user's subcommand and follow the corresponding section below.
 Every AskUserQuestion requires a real, non-empty response. If empty/blank: do NOT proceed, do NOT infer, do NOT retry AskUserQuestion. Ask the same question in plain chat text instead.
 
 ### Linear Status Changes
-Make direct calls for simple status updates (`save_issue` state changes). All content composition (comments, documents, descriptions) goes through the `powr-linear-writer` subagent.
+Make direct calls for simple status updates (`save_issue` state changes). Subagents post their own findings directly to Linear as comments — no separate writer step needed.
 
 ### File-Based Handoffs
-Subagents write outputs to files. Pass file paths (not content) to the next subagent.
+Some subagents write outputs to files. Pass file paths (not content) to the next subagent.
 - `.claude/specs/` — spec documents
 - `.claude/plans/` — implementation plans
 - `.claude/ticket-summaries/` — compact JSON ticket data
-- `.claude/handoffs/` — temporary reports between agents (clean up after ship)
 
 ### Dynamic Model Selection (Agent File Routing)
 Before spawning certain subagents, read ticket signals via `powr-workmaxxing model-signals` and use the decision table below to choose the correct agent file. The model is baked into each agent file's YAML frontmatter — the Claude Code Agent tool does NOT support a runtime `model` parameter. Log each decision so the user sees which agent file was chosen and why.
@@ -201,7 +200,7 @@ powr-workmaxxing gate record ticket_in_progress --ticket <ticket-id> --evidence 
 ```bash
 powr-workmaxxing model-signals <ticket-id> --repo "$CLAUDE_PROJECT_DIR"
 ```
-Parse the JSON output to get `estimate`, `labels`, and `complexity` (complexity will be null before investigation, since the handoff file doesn't exist yet — this is expected). Use the decision table (see "Dynamic Model Selection" in Global Rules) to choose the agent file for investigation:
+Parse the JSON output to get `estimate`, `labels`, and `complexity` (complexity will be null before investigation — this is expected). Use the decision table (see "Dynamic Model Selection" in Global Rules) to choose the agent file for investigation:
 - **powr-investigate-haiku** if `estimate <= 1` OR `labels` includes `"bug-fix"` — small/bug tickets need only find-and-report investigation
 - **powr-investigate** (default, sonnet) otherwise, including when estimate is null — unknown scope means unknown complexity; default to the safer tier
 
@@ -215,25 +214,17 @@ Agent(subagent_type="<chosen-agent-file>", prompt="
   Project: <project>
 ")
 ```
-Returns complexity assessment and handoff file path.
+Returns complexity assessment. The agent posts its findings directly to Linear as a comment.
 
-#### 5. Post investigation to Linear
-```
-Agent(subagent_type="powr-linear-writer", prompt="
-  Ticket: <ticket-id>
-  Report type: investigation
-  Handoff: .claude/handoffs/investigate-<ticket-id>.md
-")
-```
 ```bash
 powr-workmaxxing gate record investigation --ticket <ticket-id> --evidence '{"documented":true}'
 ```
 
-#### 6. Read model signals (post-investigation) and route implement agent
+#### 5. Read model signals (post-investigation) and route implement agent
 ```bash
 powr-workmaxxing model-signals <ticket-id> --repo "$CLAUDE_PROJECT_DIR"
 ```
-Parse JSON to get the updated `complexity` (now populated from the investigation handoff at `.claude/handoffs/investigate-<ticket-id>.md`). Route the implementation agent:
+Parse JSON to get the updated `complexity`. Route the implementation agent:
 - **Simple** complexity → `subagent_type="powr-implement"` (Sonnet — bounded, well-understood implementation)
 - **Moderate/Complex/null** → `subagent_type="powr-implement-complex"` (inherit — architectural decisions, cross-cutting changes, or unknown scope)
 
@@ -241,30 +232,22 @@ Note: this is an agent routing decision, not a model override. The two agents ha
 
 Log the decision: "Implementation routing: <agent> -- <reason>"
 
-#### 7. Implement
+#### 6. Implement
 ```
 Agent(subagent_type="<chosen-agent>", prompt="
   Ticket: <ticket-id>
   Title: <title>
-  Investigation: .claude/handoffs/investigate-<ticket-id>.md
   Acceptance criteria: <ACs from ticket>
   Review mode: <on|off>
 ")
 ```
+The agent posts its implementation summary directly to Linear as a comment.
 
-#### 8. Post implementation to Linear
-```
-Agent(subagent_type="powr-linear-writer", prompt="
-  Ticket: <ticket-id>
-  Report type: implementation
-  Handoff: .claude/handoffs/implement-<ticket-id>.md
-")
-```
 ```bash
 powr-workmaxxing gate record code_committed --ticket <ticket-id> --evidence '{"commitSha":"<sha>"}'
 ```
 
-#### 9. Read diff signals and code review
+#### 7. Read diff signals and code review
 ```
 mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Review" })
 ```
@@ -284,32 +267,24 @@ Log the decision: "Agent file for code review: <agentFile> -- <reason>"
 Agent(subagent_type="<chosen-agent-file>", prompt="
   Ticket: <ticket-id>
   Title: <title>
-  Implementation: .claude/handoffs/implement-<ticket-id>.md
   Review mode: <on|off>
 ")
 ```
+The agent posts its review findings directly to Linear as a comment.
 If verdict is "Changes requested," loop: spawn implement again with review feedback, then re-review. Re-read diff signals and re-select the agent file before each re-review.
 
-#### 10. Post review to Linear
-```
-Agent(subagent_type="powr-linear-writer", prompt="
-  Ticket: <ticket-id>
-  Report type: review
-  Handoff: .claude/handoffs/review-<ticket-id>.md
-")
-```
 ```bash
 powr-workmaxxing gate record coderabbit_review --ticket <ticket-id> --evidence '{"documented":true}'
 ```
 
-#### 11. Hand off
+#### 8. Hand off
 ```
 mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Human Review" })
 ```
 If review mode: tell user "Changes staged on branch `feat/<ticket-id>-<desc>`. Please review, commit, and create a PR."
 
 #### Blocked: Manual Action
-If at any point a ticket requires non-code human action: post comment via `powr-linear-writer` explaining what's needed, set to "Blocked: Manual Action", move on to next ticket.
+If at any point a ticket requires non-code human action: the executing agent will post a comment on the ticket explaining what's needed. Set to "Blocked: Manual Action", move on to next ticket.
 
 ### Batch: wave-based parallel worktrees
 
@@ -400,30 +375,20 @@ Agent(subagent_type="<chosen-agent-file>", prompt="
 If issues > 0, present findings to user. Wait for resolution.
 If blocked tickets exist, report them separately.
 
-### 3. Post ship report to Linear
-For each ticket:
-```
-Agent(subagent_type="powr-linear-writer", prompt="
-  Ticket: <ticket-id>
-  Report type: ship
-  Handoff: .claude/handoffs/ship-<feature>.md
-  Feature: <feature-name>
-")
-```
+The ship-verify agent posts its ship report directly to Linear as comments on each ticket.
 
-### 4. Mark tickets Done
+### 3. Mark tickets Done
 For each ticket currently "In Human Review":
 ```
 mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "Done" })
 ```
 
-### 5. Clean up
+### 4. Clean up
 ```bash
 rm .claude/plans/<name>.md
-rm -rf .claude/handoffs/
 ```
 
-### 6. Complete
+### 5. Complete
 ```bash
 powr-workmaxxing gate record ship_verified --evidence '{"verified":true}'
 powr-workmaxxing advance  # SHIPPING → IDLE

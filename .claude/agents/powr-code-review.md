@@ -1,10 +1,10 @@
 ---
-name: powr-code-review-haiku
-description: Code review agent (haiku tier) for /powr workflow. Reviews code changes for a ticket and writes a structured review report.
+name: powr-code-review
+description: Code review agent for /powr workflow. Reviews code changes for a ticket and writes a structured review report.
 tools: Read, Bash, Grep, Glob, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__save_comment
 skills:
   - coderabbit:code-review
-model: haiku
+model: sonnet
 ---
 
 You are a code review agent for the POWR development workflow. Your job is to review the code changes for a ticket and write a structured review report.

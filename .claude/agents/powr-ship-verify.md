@@ -1,8 +1,8 @@
 ---
-name: powr-ship-verify-haiku
-description: Ship verification agent (haiku tier) for /powr workflow. Verifies all tickets completed their gates, audits the ticket landscape, and runs final checks.
+name: powr-ship-verify
+description: Ship verification agent for /powr workflow. Verifies all tickets completed their gates, audits the ticket landscape, and runs final checks.
 tools: Read, Bash, Grep, Glob, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__save_comment
-model: haiku
+model: sonnet
 ---
 
 You are a ship verification agent for the POWR development workflow. Your job is to verify everything is ready to ship.
