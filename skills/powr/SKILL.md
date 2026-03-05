@@ -39,24 +39,26 @@ Subagents write outputs to files. Pass file paths (not content) to the next suba
 - `.claude/ticket-summaries/` — compact JSON ticket data
 - `.claude/handoffs/` — temporary reports between agents (clean up after ship)
 
-### Dynamic Model Selection
-Before spawning certain subagents, read ticket signals via `powr-workmaxxing model-signals` and use the decision table below to choose a model override. Log each decision so the user sees which model was chosen and why.
+### Dynamic Model Selection (Agent File Routing)
+Before spawning certain subagents, read ticket signals via `powr-workmaxxing model-signals` and use the decision table below to choose the correct agent file. The model is baked into each agent file's YAML frontmatter — the Claude Code Agent tool does NOT support a runtime `model` parameter. Log each decision so the user sees which agent file was chosen and why.
 
 **Decision table** (ground truth in `src/commands/model-select.ts`):
 
-| Agent | Haiku | Sonnet | Fallback (missing data) |
-|-------|-------|--------|------------------------|
-| powr-investigate | estimate <= 1 OR "bug-fix" label | estimate > 1 and no bug-fix | sonnet |
-| powr-code-review | 1 file AND < 50 changed lines | multi-file OR >= 50 lines | sonnet |
-| powr-ship-verify | 1-2 tickets AND all gates passed | 3+ tickets OR failed gates | sonnet |
-| powr-implement | N/A (always sonnet via agent default) | N/A | N/A |
-| powr-implement-complex | N/A (always inherit via agent default) | N/A | N/A |
+| Base Agent | Haiku Variant (agent file) | When Haiku | When Sonnet (default file) | Fallback (missing data) |
+|------------|---------------------------|------------|---------------------------|------------------------|
+| powr-investigate | powr-investigate-haiku | estimate <= 1 OR "bug-fix" label | estimate > 1 and no bug-fix | default (sonnet) |
+| powr-code-review | powr-code-review-haiku | 1 file AND < 50 changed lines | multi-file OR >= 50 lines | default (sonnet) |
+| powr-ship-verify | powr-ship-verify-haiku | 1-2 tickets AND all gates passed | 3+ tickets OR failed gates | default (sonnet) |
+| powr-implement | N/A (always sonnet via agent default) | N/A | N/A | N/A |
+| powr-implement-complex | N/A (always inherit via agent default) | N/A | N/A | N/A |
 
-**Decision tree explained:**
-- **Haiku** is chosen when the task is bounded and well-understood: small estimates, bug-fix labels, tiny diffs, or simple ship verification. Haiku is ~19x cheaper than Opus.
-- **Sonnet** is the default for everything else. It handles deep codebase exploration, multi-file review, and complex ship verification without needing Opus-level reasoning.
-- **Fallback rule**: when any required signal is null (no estimate, no diff stats, unknown gate status), always fall back to sonnet, never haiku. Missing data means unknown scope — over-provision rather than under-deliver.
-- **Implement routing is different**: instead of a model override, we route to a different agent (`powr-implement` vs `powr-implement-complex`). Simple complexity → `powr-implement` (sonnet). Moderate/Complex/unknown → `powr-implement-complex` (inherit = user's model).
+**How it works:**
+- Each agent that supports dynamic model selection has two files: a default (sonnet) and a `-haiku` variant. Both share the same prompt body; only the `model:` frontmatter differs.
+- `selectModel()` in `src/commands/model-select.ts` returns an `agentFile` string — the subagent_type to pass to the Agent tool.
+- **Haiku variant** is chosen when the task is bounded and well-understood: small estimates, bug-fix labels, tiny diffs, or simple ship verification. Haiku is ~19x cheaper than Opus.
+- **Default (sonnet)** is used for everything else. It handles deep codebase exploration, multi-file review, and complex ship verification without needing Opus-level reasoning.
+- **Fallback rule**: when any required signal is null (no estimate, no diff stats, unknown gate status), always use the default (sonnet) file, never haiku. Missing data means unknown scope — over-provision rather than under-deliver.
+- **Implement routing is different**: instead of a model variant, we route to a different agent (`powr-implement` vs `powr-implement-complex`). Simple complexity -> `powr-implement` (sonnet). Moderate/Complex/unknown -> `powr-implement-complex` (inherit = user's model).
 
 ---
 
@@ -199,15 +201,15 @@ powr-workmaxxing gate record ticket_in_progress --ticket <ticket-id> --evidence 
 ```bash
 powr-workmaxxing model-signals <ticket-id> --repo "$CLAUDE_PROJECT_DIR"
 ```
-Parse the JSON output to get `estimate`, `labels`, and `complexity` (complexity will be null before investigation, since the handoff file doesn't exist yet — this is expected). Use the decision table (see "Dynamic Model Selection" in Global Rules) to choose the model for `powr-investigate`:
-- **haiku** if `estimate <= 1` OR `labels` includes `"bug-fix"` — small/bug tickets need only find-and-report investigation
-- **sonnet** otherwise, including when estimate is null — unknown scope means unknown complexity; default to the safer tier
+Parse the JSON output to get `estimate`, `labels`, and `complexity` (complexity will be null before investigation, since the handoff file doesn't exist yet — this is expected). Use the decision table (see "Dynamic Model Selection" in Global Rules) to choose the agent file for investigation:
+- **powr-investigate-haiku** if `estimate <= 1` OR `labels` includes `"bug-fix"` — small/bug tickets need only find-and-report investigation
+- **powr-investigate** (default, sonnet) otherwise, including when estimate is null — unknown scope means unknown complexity; default to the safer tier
 
-Log the decision: "Model selection for powr-investigate: <model> -- <reason>"
+Log the decision: "Agent file for investigation: <agentFile> -- <reason>"
 
 #### 4. Investigate
 ```
-Agent(subagent_type="powr-investigate", model="<chosen-model>", prompt="
+Agent(subagent_type="<chosen-agent-file>", prompt="
   Ticket: <ticket-id>
   Description: <brief description>
   Project: <project>
@@ -267,26 +269,26 @@ powr-workmaxxing gate record code_committed --ticket <ticket-id> --evidence '{"c
 mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Review" })
 ```
 
-Read diff stats for model selection:
+Read diff stats for agent file selection:
 ```bash
 powr-workmaxxing model-signals <ticket-id> --repo "$CLAUDE_PROJECT_DIR" --diff
 ```
-Parse JSON to get `diffStats`. Use the decision table to choose the model for `powr-code-review`:
-- **haiku** if `diffStats.files === 1` AND `(diffStats.insertions + diffStats.deletions) < 50` — a single-screen change is pure pattern-matching
-- **sonnet** if multiple files OR >= 50 changed lines — multi-file diffs need cross-file reasoning
-- **sonnet** if `diffStats` is null — can't assess scope, default to safer tier
+Parse JSON to get `diffStats`. Use the decision table to choose the agent file for code review:
+- **powr-code-review-haiku** if `diffStats.files === 1` AND `(diffStats.insertions + diffStats.deletions) < 50` — a single-screen change is pure pattern-matching
+- **powr-code-review** (default, sonnet) if multiple files OR >= 50 changed lines — multi-file diffs need cross-file reasoning
+- **powr-code-review** (default, sonnet) if `diffStats` is null — can't assess scope, default to safer tier
 
-Log the decision: "Model selection for powr-code-review: <model> -- <reason>"
+Log the decision: "Agent file for code review: <agentFile> -- <reason>"
 
 ```
-Agent(subagent_type="powr-code-review", model="<chosen-model>", prompt="
+Agent(subagent_type="<chosen-agent-file>", prompt="
   Ticket: <ticket-id>
   Title: <title>
   Implementation: .claude/handoffs/implement-<ticket-id>.md
   Review mode: <on|off>
 ")
 ```
-If verdict is "Changes requested," loop: spawn implement again with review feedback, then re-review. Re-read diff signals before each re-review.
+If verdict is "Changes requested," loop: spawn implement again with review feedback, then re-review. Re-read diff signals and re-select the agent file before each re-review.
 
 #### 10. Post review to Linear
 ```
@@ -371,22 +373,22 @@ Tell user: "All tickets executed. Type `/powr ship` to verify and ship."
 
 ### 1. Read signals and spawn ship verification agent
 
-Determine the model for `powr-ship-verify`:
+Determine the agent file for ship verification:
 1. Read the ticket-summaries JSON to count the number of tickets.
 2. Check gate status for each ticket:
    ```bash
    powr-workmaxxing gate check-ticket <ticket-id> -w <workflow-id> --json
    ```
 3. Apply the decision table:
-   - **haiku** if ticket count is 1-2 AND all tickets have all gates passed — verification is "read state, confirm green, format report"; no reasoning needed
-   - **sonnet** if 3+ tickets — larger surface area; Sonnet provides thoroughness on multi-ticket ships
-   - **sonnet** if any gates failed — failed gates require investigation: which gate, which ticket, why; Sonnet has the reasoning depth
-   - **sonnet** if count or gate status is unknown — cannot confirm the happy path without complete data
+   - **powr-ship-verify-haiku** if ticket count is 1-2 AND all tickets have all gates passed — verification is "read state, confirm green, format report"; no reasoning needed
+   - **powr-ship-verify** (default, sonnet) if 3+ tickets — larger surface area; Sonnet provides thoroughness on multi-ticket ships
+   - **powr-ship-verify** (default, sonnet) if any gates failed — failed gates require investigation: which gate, which ticket, why; Sonnet has the reasoning depth
+   - **powr-ship-verify** (default, sonnet) if count or gate status is unknown — cannot confirm the happy path without complete data
 
-Log the decision: "Model selection for powr-ship-verify: <model> -- <reason>"
+Log the decision: "Agent file for ship verification: <agentFile> -- <reason>"
 
 ```
-Agent(subagent_type="powr-ship-verify", model="<chosen-model>", prompt="
+Agent(subagent_type="<chosen-agent-file>", prompt="
   Ticket summaries: .claude/ticket-summaries/<name>.json
   Workflow: <workflow-id>
   Repo: $CLAUDE_PROJECT_DIR
