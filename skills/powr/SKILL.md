@@ -52,7 +52,11 @@ Before spawning certain subagents, read ticket signals via `powr-workmaxxing mod
 | powr-implement | N/A (always sonnet via agent default) | N/A | N/A |
 | powr-implement-complex | N/A (always inherit via agent default) | N/A | N/A |
 
-Implement routing (not model override): Simple complexity -> `powr-implement`, Moderate/Complex/unknown -> `powr-implement-complex`.
+**Decision tree explained:**
+- **Haiku** is chosen when the task is bounded and well-understood: small estimates, bug-fix labels, tiny diffs, or simple ship verification. Haiku is ~19x cheaper than Opus.
+- **Sonnet** is the default for everything else. It handles deep codebase exploration, multi-file review, and complex ship verification without needing Opus-level reasoning.
+- **Fallback rule**: when any required signal is null (no estimate, no diff stats, unknown gate status), always fall back to sonnet, never haiku. Missing data means unknown scope — over-provision rather than under-deliver.
+- **Implement routing is different**: instead of a model override, we route to a different agent (`powr-implement` vs `powr-implement-complex`). Simple complexity → `powr-implement` (sonnet). Moderate/Complex/unknown → `powr-implement-complex` (inherit = user's model).
 
 ---
 
@@ -195,9 +199,9 @@ powr-workmaxxing gate record ticket_in_progress --ticket <ticket-id> --evidence 
 ```bash
 powr-workmaxxing model-signals <ticket-id> --repo "$CLAUDE_PROJECT_DIR"
 ```
-Parse the JSON output to get `estimate`, `labels`, and `complexity` (complexity will be null before investigation). Use the decision table (see "Dynamic Model Selection" in Global Rules) to choose the model for `powr-investigate`:
-- **haiku** if `estimate <= 1` OR `labels` includes `"bug-fix"`
-- **sonnet** otherwise (including when estimate is null)
+Parse the JSON output to get `estimate`, `labels`, and `complexity` (complexity will be null before investigation, since the handoff file doesn't exist yet — this is expected). Use the decision table (see "Dynamic Model Selection" in Global Rules) to choose the model for `powr-investigate`:
+- **haiku** if `estimate <= 1` OR `labels` includes `"bug-fix"` — small/bug tickets need only find-and-report investigation
+- **sonnet** otherwise, including when estimate is null — unknown scope means unknown complexity; default to the safer tier
 
 Log the decision: "Model selection for powr-investigate: <model> -- <reason>"
 
@@ -227,9 +231,11 @@ powr-workmaxxing gate record investigation --ticket <ticket-id> --evidence '{"do
 ```bash
 powr-workmaxxing model-signals <ticket-id> --repo "$CLAUDE_PROJECT_DIR"
 ```
-Parse JSON to get the updated `complexity` (now populated from the investigation handoff). Route the implementation agent:
-- **Simple** complexity -> `subagent_type="powr-implement"` (sonnet default)
-- **Moderate/Complex/null** -> `subagent_type="powr-implement-complex"` (inherit default)
+Parse JSON to get the updated `complexity` (now populated from the investigation handoff at `.claude/handoffs/investigate-<ticket-id>.md`). Route the implementation agent:
+- **Simple** complexity → `subagent_type="powr-implement"` (Sonnet — bounded, well-understood implementation)
+- **Moderate/Complex/null** → `subagent_type="powr-implement-complex"` (inherit — architectural decisions, cross-cutting changes, or unknown scope)
+
+Note: this is an agent routing decision, not a model override. The two agents have different system prompts optimized for their complexity tier.
 
 Log the decision: "Implementation routing: <agent> -- <reason>"
 
@@ -266,8 +272,9 @@ Read diff stats for model selection:
 powr-workmaxxing model-signals <ticket-id> --repo "$CLAUDE_PROJECT_DIR" --diff
 ```
 Parse JSON to get `diffStats`. Use the decision table to choose the model for `powr-code-review`:
-- **haiku** if `diffStats.files === 1` AND `(diffStats.insertions + diffStats.deletions) < 50`
-- **sonnet** otherwise (including when diffStats is null)
+- **haiku** if `diffStats.files === 1` AND `(diffStats.insertions + diffStats.deletions) < 50` — a single-screen change is pure pattern-matching
+- **sonnet** if multiple files OR >= 50 changed lines — multi-file diffs need cross-file reasoning
+- **sonnet** if `diffStats` is null — can't assess scope, default to safer tier
 
 Log the decision: "Model selection for powr-code-review: <model> -- <reason>"
 
@@ -371,8 +378,10 @@ Determine the model for `powr-ship-verify`:
    powr-workmaxxing gate check-ticket <ticket-id> -w <workflow-id> --json
    ```
 3. Apply the decision table:
-   - **haiku** if ticket count is 1-2 AND all tickets have all gates passed
-   - **sonnet** otherwise (3+ tickets, any failed gates, or unknown status)
+   - **haiku** if ticket count is 1-2 AND all tickets have all gates passed — verification is "read state, confirm green, format report"; no reasoning needed
+   - **sonnet** if 3+ tickets — larger surface area; Sonnet provides thoroughness on multi-ticket ships
+   - **sonnet** if any gates failed — failed gates require investigation: which gate, which ticket, why; Sonnet has the reasoning depth
+   - **sonnet** if count or gate status is unknown — cannot confirm the happy path without complete data
 
 Log the decision: "Model selection for powr-ship-verify: <model> -- <reason>"
 
