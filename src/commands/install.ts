@@ -8,6 +8,8 @@ import {
   readFileSync,
   renameSync,
   lstatSync,
+  readdirSync,
+  copyFileSync,
 } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -243,17 +245,18 @@ export const installCommand = new Command("install")
           console.log(`Skipping ${target} (not found)`);
           continue;
         }
-        installInRepo(target, hookSource, skillsDir, opts.dryRun ?? false);
+        installInRepo(target, hookSource, skillsDir, sourceDir, opts.dryRun ?? false);
       }
 
       console.log("Done. Restart Claude Code to pick up the new skill.");
     }
   );
 
-function installInRepo(
+export function installInRepo(
   repoPath: string,
   hookSource: string,
   skillsDir: string,
+  sourceDir: string,
   dryRun: boolean
 ): void {
   const repoName =
@@ -305,6 +308,51 @@ function installInRepo(
     }
   }
   console.log("  Linked skill: /powr");
+
+  // Symlink agent definitions
+  const sourceAgentsDir = join(sourceDir, ".claude", "agents");
+  const targetAgentsDir = join(repoPath, ".claude", "agents");
+
+  if (!dryRun) {
+    mkdirSync(targetAgentsDir, { recursive: true });
+  }
+
+  let agentCount = 0;
+  if (existsSync(sourceAgentsDir)) {
+    const agentFiles = readdirSync(sourceAgentsDir).filter((f) =>
+      /^powr-.*\.md$/.test(f)
+    );
+
+    for (const file of agentFiles) {
+      const srcFile = resolve(join(sourceAgentsDir, file));
+      const destFile = join(targetAgentsDir, file);
+
+      if (dryRun) {
+        console.log(`  [dry-run] Would link agent: ${file}`);
+      } else {
+        // Use lstatSync to detect broken symlinks (existsSync returns false for them)
+        try {
+          lstatSync(destFile);
+          unlinkSync(destFile);
+        } catch {
+          // file does not exist — nothing to remove
+        }
+        try {
+          symlinkSync(srcFile, destFile);
+        } catch {
+          copyFileSync(srcFile, destFile);
+          console.warn(`  Warning: symlink failed for ${file}, copied instead`);
+        }
+      }
+      agentCount++;
+    }
+  }
+
+  if (!dryRun) {
+    console.log(`  Linked ${agentCount} agent definitions`);
+  } else if (agentCount === 0) {
+    console.log("  [dry-run] No agent files found to link");
+  }
 
   // Update settings.local.json — replace hooks section
   updateSettings(repoPath, dryRun);
