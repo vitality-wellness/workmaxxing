@@ -1,0 +1,1 @@
+/Users/rokindo/Dev/vitality/powr-workmaxxing/hooks/powr-hook.sh

@@ -140,7 +140,7 @@ You:    /powr execute cycle "Sprint 12"        ← all tickets in a cycle
 You:    /powr execute project "MVP Launch"     ← all tickets in a project
 ```
 
-**Single ticket:** Claude sets the ticket to In Progress (auto-records the `ticket_in_progress` gate), investigates the codebase, implements, commits (auto-records `code_committed` with the real SHA), runs CodeRabbit review (sets ticket to "In Review"), then after review completes sets it to "In Human Review" for you to verify. Four quality gates per ticket — it can't skip any of them. Tickets stay in "In Human Review" until you ship.
+**Single ticket:** Claude sets the ticket to In Progress (auto-records the `ticket_in_progress` gate), investigates the codebase, implements, commits (auto-records `code_committed` with the real SHA), runs CodeRabbit review (sets ticket to "In Review"), then after review completes sets it to "In Human Review" for you to verify. Four quality gates per ticket — it can't skip any of them. Tickets stay in "In Human Review" until you ship. Each step posts its findings directly as a comment on the Linear ticket, building a visible timeline of investigation, implementation, and review.
 
 **Batch:** Claude builds a dependency graph, groups independent tickets into waves, and runs each wave in parallel worktrees. It shows you the plan:
 
@@ -205,10 +205,11 @@ Everything below is how the system works. You don't need it to use `/powr`.
 
 ## Setup details
 
-`powr-workmaxxing install` symlinks two things into your repo:
+`powr-workmaxxing install` symlinks three things into your repo:
 
 1. `.claude/hooks/powr-hook.sh` — the unified hook runner
 2. `.claude/skills/powr/` — the workflow skill
+3. `.claude/agents/powr-*.md` — 14 subagent definitions (with file-copy fallback on Windows)
 
 You also need hooks in `.claude/settings.local.json`:
 
@@ -346,9 +347,9 @@ Merge hook blocks `git merge worktree-*` if branch diverged — must rebase firs
 
 If context fills up mid-workflow:
 
-1. Hook reminds Claude to post a handoff comment
+1. Hook reminds Claude to post a handoff comment on the Linear ticket
 2. Comment includes: current step, completed work, remaining steps, key decisions
-3. Next session reads state from SQLite — no transcript dependency
+3. Next session reads state from SQLite + Linear comments — no transcript dependency
 
 ---
 
@@ -362,12 +363,38 @@ Workflows untouched for 2+ hours get a soft warning instead of blocking.
 
 ```
 You ←→ Claude Code
-         ├── /powr skill (spec, plan, execute, ship, status, bypass)
+         ├── /powr skill — lightweight orchestrator (~300 lines, routing only)
+         │     ├── Spawns specialized subagents via Agent tool
          │     ├── Bash(powr-workmaxxing <cmd>)  — state machine
          │     └── Linear MCP                    — tickets
+         ├── Subagents (.claude/agents/powr-*.md)
+         │     ├── powr-spec (opus)              — user interview + spec writing
+         │     ├── powr-plan (opus)              — codebase exploration + planning
+         │     ├── powr-review (sonnet)          — 5-section plan review
+         │     ├── powr-tickets (haiku)          — plan → Linear tickets
+         │     ├── powr-investigate (sonnet)     — ticket investigation
+         │     ├── powr-implement (sonnet)       — code implementation (simple)
+         │     ├── powr-implement-complex (inherit) — code implementation (moderate/complex)
+         │     ├── powr-code-review (sonnet)     — review code changes
+         │     ├── powr-ship-verify (sonnet)     — ship verification
+         │     └── powr-batch-worker (inherit)   — full ticket in isolated worktree
          └── Hooks (powr-hook.sh, 12 handlers)
                └── sqlite3 ~/.powr/workflow.db   — <50ms queries
 ```
+
+Content stays in subagent contexts — only ticket IDs and brief summaries flow through the orchestrator. Each agent posts its findings directly as comments on the Linear ticket.
+
+### Dynamic model selection
+
+The orchestrator routes tasks to cheaper models when the work doesn't need top-tier reasoning. Signal extraction (`powr-workmaxxing model-signals`) reads ticket estimates, labels, complexity ratings, and diff sizes, then the orchestrator spawns the appropriate agent variant:
+
+| Agent | Haiku variant | When |
+|---|---|---|
+| `powr-investigate` | `powr-investigate-haiku` | estimate <= 1 or "bug-fix" label |
+| `powr-code-review` | `powr-code-review-haiku` | diff < 50 lines, single file |
+| `powr-ship-verify` | `powr-ship-verify-haiku` | 1-2 tickets, all gates passed |
+
+Implementation routing uses separate agents: `powr-implement` (sonnet) for Simple complexity, `powr-implement-complex` (inherits user model) for Moderate/Complex. The decision logic lives in a testable TypeScript function (`selectModel()` in `src/commands/model-select.ts`).
 
 ### State machine
 
@@ -448,6 +475,11 @@ powr-workmaxxing
   repo analyze                        Run static analysis
   repo info [--json]                  Show repo config
   repo set <key> <value>              Set repo config field (e.g. reviewMode true)
+
+  model-signals <ticket-id>           Extract signals for model routing
+    [--summaries <path>]                (default: .claude/ticket-summaries/)
+    [--diff]                            Include git diff stats
+    [--repo <path>]                     Repository path
 
   audit log [--limit N]               Recent events
 ```

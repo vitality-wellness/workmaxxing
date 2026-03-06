@@ -1,0 +1,63 @@
+{
+  "feature": "SUNDAE-2318: Optimize Claude Linear Workflow",
+  "tickets": [
+    {
+      "id": "SUNDAE-2416",
+      "title": "Update ticket-summaries JSON schema to include labels and numeric estimates",
+      "summary": "Update powr-tickets agent definition to specify numeric estimates (1-8 scale) instead of string S/M/L, and add labels array field for model selection signals.",
+      "priority": 3,
+      "estimate": 1,
+      "deps": [],
+      "status": "created"
+    },
+    {
+      "id": "SUNDAE-2417",
+      "title": "Add model selection signal extraction CLI command",
+      "summary": "Create powr-workmaxxing model-signals CLI command that extracts cheap signals (estimate, labels, complexity, diff stats) for model routing decisions via file-based extraction.",
+      "priority": 2,
+      "estimate": 3,
+      "deps": ["SUNDAE-2416"],
+      "status": "created"
+    },
+    {
+      "id": "SUNDAE-2418",
+      "title": "Add dynamic model selection logic to SKILL.md orchestrator",
+      "summary": "Add signal-reading and model-override logic to SKILL.md execute flow with testable selectModel() function for routing agents to appropriate models based on signals.",
+      "priority": 2,
+      "estimate": 3,
+      "deps": ["SUNDAE-2417"],
+      "status": "created"
+    },
+    {
+      "id": "SUNDAE-2419",
+      "title": "Add agent definition installation to install command",
+      "summary": "Extend powr-workmaxxing install to symlink powr-*.md agent files into target repos with file-copy fallback for unsupported environments.",
+      "priority": 2,
+      "estimate": 1,
+      "deps": [],
+      "status": "created"
+    },
+    {
+      "id": "SUNDAE-2420",
+      "title": "End-to-end validation and documentation",
+      "summary": "Validate multi-agent workflow end-to-end with smoke test script, update architecture documentation, add inline comments to SKILL.md explaining model selection logic.",
+      "priority": 3,
+      "estimate": 3,
+      "deps": ["SUNDAE-2417", "SUNDAE-2418", "SUNDAE-2419"],
+      "status": "created"
+    }
+  ],
+  "skipped": [],
+  "metadata": {
+    "parentTicket": "SUNDAE-2318",
+    "team": "Sundae Labs",
+    "cycle": "92b31aa7-4c3b-41e6-b8c8-4dc727412fb4",
+    "label": "Claude-Linear Workflow",
+    "waves": {
+      "wave1": ["SUNDAE-2416", "SUNDAE-2419"],
+      "wave2": ["SUNDAE-2417"],
+      "wave3": ["SUNDAE-2418"],
+      "wave4": ["SUNDAE-2420"]
+    }
+  }
+}
