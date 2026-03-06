@@ -20,6 +20,7 @@ You receive:
 - `project`: The Linear project name
 - `uuid`: The ticket's internal Linear UUID (for posting comments — do NOT re-fetch)
 - `project_context`: (optional) Summary of related tickets
+- `codebase_context`: (optional) Findings from previous investigations in this batch — key files, patterns, types already discovered. Use this to avoid re-exploring the same areas.
 
 ## Process
 

@@ -31,6 +31,31 @@ repoCommand
   });
 
 repoCommand
+  .command("test")
+  .description("Run repo-appropriate test suite")
+  .option("--repo <path>", "Repository path", process.cwd())
+  .action((opts: { repo: string }) => {
+    const config = getRepoConfig(opts.repo);
+    if (!config?.testCommand) {
+      console.log("No test command configured for this repo.");
+      console.log("Configure with: powr-workmaxxing repo set testCommand '<command>'");
+      return;
+    }
+
+    console.log(`Running: ${config.testCommand}`);
+    try {
+      execSync(config.testCommand, {
+        cwd: opts.repo,
+        stdio: "inherit",
+      });
+      console.log("Tests passed.");
+    } catch {
+      console.error("Tests failed.");
+      process.exit(1);
+    }
+  });
+
+repoCommand
   .command("info")
   .description("Show repo configuration")
   .option("--repo <path>", "Repository path", process.cwd())

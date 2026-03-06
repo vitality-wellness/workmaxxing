@@ -204,6 +204,121 @@ gateCommand
   );
 
 gateCommand
+  .command("record-batch")
+  .description("Record multiple gates at once for a ticket (comma-separated names)")
+  .argument("<names>", "Comma-separated gate names (e.g., investigation,code_committed)")
+  .option("--evidence <json>", "Evidence JSON (applied to all gates)", "{}")
+  .option("--repo <path>", "Repository path", process.cwd())
+  .option("-w, --workflow <id>", "Workflow ID (or set POWR_WF env var)")
+  .option("-t, --ticket <id>", "Ticket ID (e.g., POWR-500) — scopes gates to a ticket workflow")
+  .option("--json", "Output as JSON")
+  .action(
+    (
+      names: string,
+      opts: {
+        evidence: string;
+        repo: string;
+        workflow?: string;
+        ticket?: string;
+        json?: boolean;
+      }
+    ) => {
+      const gateNames = names.split(",").map((n) => n.trim()).filter(Boolean);
+      if (gateNames.length === 0) {
+        console.error("Error: no gate names provided.");
+        process.exit(2);
+      }
+
+      const db = getDb();
+      const gates = new GateRepo(db);
+      const audit = new AuditRepo(db);
+      const ticketWorkflows = new TicketWorkflowRepo(db);
+
+      const workflow = requireWorkflow(db, opts);
+
+      let evidence: Record<string, unknown>;
+      try {
+        evidence = JSON.parse(opts.evidence) as Record<string, unknown>;
+      } catch {
+        console.error("Error: --evidence must be valid JSON.");
+        process.exit(2);
+      }
+
+      // Resolve ticket workflow once
+      let ticketWorkflowId: string | null = null;
+      if (opts.ticket) {
+        let tw = ticketWorkflows.findByTicketId(workflow.id, opts.ticket);
+        if (!tw) {
+          tw = ticketWorkflows.create({
+            workflowId: workflow.id,
+            ticketId: opts.ticket,
+            linearIssueId: opts.ticket,
+          });
+          if (!opts.json) {
+            console.log(`Created ticket workflow for ${opts.ticket}`);
+          }
+        }
+        ticketWorkflowId = tw.id;
+      }
+
+      const results: Array<{ gate: string; recorded: boolean; error?: string }> = [];
+
+      for (const gateName of gateNames) {
+        // Validate evidence schema
+        const validation = validateGateEvidence(gateName, evidence);
+        if (!validation.valid) {
+          results.push({ gate: gateName, recorded: false, error: validation.error });
+          continue;
+        }
+
+        gates.record({
+          workflowId: workflow.id,
+          ticketWorkflowId,
+          gateName,
+          evidence,
+        });
+
+        audit.log({
+          workflowId: workflow.id,
+          eventType: "gate_recorded",
+          details: { gate: gateName, evidence, ticketId: opts.ticket ?? null },
+        });
+
+        results.push({ gate: gateName, recorded: true });
+
+        // Auto-advance ticket stage
+        if (ticketWorkflowId && GATE_NEXT_STAGE[gateName]) {
+          const tw = ticketWorkflows.getById(ticketWorkflowId)!;
+          const targetStage = GATE_NEXT_STAGE[gateName]!;
+          const currentIdx = TICKET_STAGE_ORDER.indexOf(tw.stage);
+          const targetIdx = TICKET_STAGE_ORDER.indexOf(targetStage);
+
+          if (targetIdx > currentIdx) {
+            ticketWorkflows.updateStage(ticketWorkflowId, targetStage);
+            if (!opts.json) {
+              console.log(`  → ${gateName}: ticket stage advanced to ${targetStage}`);
+            }
+          }
+        }
+      }
+
+      if (opts.json) {
+        console.log(JSON.stringify({ results, ticketId: opts.ticket ?? null }));
+      } else {
+        for (const r of results) {
+          if (r.recorded) {
+            console.log(`✅ ${r.gate}`);
+          } else {
+            console.log(`❌ ${r.gate}: ${r.error}`);
+          }
+        }
+      }
+
+      db.close();
+    }
+  );
+
+gateCommand
   .command("check")
   .description("Check if a gate is passed")
   .argument("<name>", "Gate name")

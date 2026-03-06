@@ -11,6 +11,7 @@ export interface RepoConfig {
   team: string;
   productionPaths: string[];
   analyzeCommand: string | null;
+  testCommand: string | null;
   restartCommand: string | null;
   reviewMode?: boolean;
 }
@@ -25,6 +26,7 @@ const DEFAULTS: RepoConfigMap = {
     team: "POWR",
     productionPaths: ["lib/", "ios/"],
     analyzeCommand: "dart analyze",
+    testCommand: "flutter test",
     restartCommand: "./scripts/run_prod.sh",
   },
   "powr-api": {
@@ -32,6 +34,7 @@ const DEFAULTS: RepoConfigMap = {
     team: "POWR",
     productionPaths: ["internal/", "cmd/"],
     analyzeCommand: "go vet ./...",
+    testCommand: "go test ./...",
     restartCommand: null,
   },
   website: {
@@ -39,6 +42,7 @@ const DEFAULTS: RepoConfigMap = {
     team: "POWR",
     productionPaths: ["src/"],
     analyzeCommand: "npm run build",
+    testCommand: "npm test",
     restartCommand: null,
   },
 };
@@ -120,6 +124,7 @@ export function registerRepo(repoPath: string): boolean {
     team: "",
     productionPaths: [],
     analyzeCommand: null,
+    testCommand: null,
     restartCommand: null,
   };
   writeFileSync(CONFIG_PATH, JSON.stringify(configs, null, 2));

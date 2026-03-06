@@ -38,8 +38,10 @@ Spec and plan documents are stored as Linear Documents. Pass document IDs (not c
 - Plan → Linear Document ID from powr-plan
 - `.claude/ticket-summaries/` — compact JSON ticket data (local file)
 
-### Dynamic Model Selection (Agent File Routing)
-Before spawning certain subagents, read ticket signals via `powr-workmaxxing model-signals` and use the decision table below to choose the correct agent file. The model is baked into each agent file's YAML frontmatter — the Claude Code Agent tool does NOT support a runtime `model` parameter. Log each decision so the user sees which agent file was chosen and why.
+### Dynamic Model Selection (Inline Routing)
+Use the pre-fetched ticket data (estimate, labels, complexity) to choose agent files inline. Do NOT call `powr-workmaxxing model-signals` for investigate or implement routing — the data is already available. Only call `model-signals --diff` for code-review routing (diff stats aren't available until after implementation).
+
+Log each decision so the user sees which agent file was chosen and why.
 
 **Decision table** (ground truth in `src/commands/model-select.ts`):
 
@@ -53,11 +55,11 @@ Before spawning certain subagents, read ticket signals via `powr-workmaxxing mod
 
 **How it works:**
 - Each agent that supports dynamic model selection has two files: a default (sonnet) and a `-haiku` variant. Both share the same prompt body; only the `model:` frontmatter differs.
-- `selectModel()` in `src/commands/model-select.ts` returns an `agentFile` string — the subagent_type to pass to the Agent tool.
-- **Haiku variant** is chosen when the task is bounded and well-understood: small estimates, bug-fix labels, tiny diffs, or simple ship verification. Haiku is ~19x cheaper than Opus.
-- **Default (sonnet)** is used for everything else. It handles deep codebase exploration, multi-file review, and complex ship verification without needing Opus-level reasoning.
-- **Fallback rule**: when any required signal is null (no estimate, no diff stats, unknown gate status), always use the default (sonnet) file, never haiku. Missing data means unknown scope — over-provision rather than under-deliver.
-- **Implement routing is different**: instead of a model variant, we route to a different agent (`powr-implement` vs `powr-implement-complex`). Simple complexity -> `powr-implement` (sonnet). Moderate/Complex/unknown -> `powr-implement-complex` (inherit = user's model).
+- **Investigate routing**: use pre-fetched `estimate` and `labels` directly. If `estimate <= 1` OR `labels` includes `"bug-fix"` → haiku. Otherwise → sonnet.
+- **Implement routing**: use the `Complexity` returned by the investigate agent. `Simple` → `powr-implement` (sonnet). `Moderate/Complex/null` → `powr-implement-complex` (inherit).
+- **Code-review routing**: this is the ONE case where you must call `model-signals --diff` because diff stats only exist after implementation.
+- **Ship-verify routing**: use ticket count from summaries JSON + gate check results. Both are already available.
+- **Fallback rule**: when any required signal is null, always use the default (sonnet) file. Missing data means unknown scope.
 
 ---
 
@@ -137,24 +139,25 @@ Approve all sections, or flag any for revision?
 
 ### 5. Record review gates
 ```bash
-powr-workmaxxing gate record review_architecture --evidence '{"approved":true}' && \
-powr-workmaxxing gate record review_code_quality --evidence '{"approved":true}' && \
-powr-workmaxxing gate record review_tests --evidence '{"approved":true}' && \
-powr-workmaxxing gate record review_performance --evidence '{"approved":true}' && \
-powr-workmaxxing gate record review_ticket_decomposition --evidence '{"approved":true}'
+powr-workmaxxing gate record-batch review_architecture,review_code_quality,review_tests,review_performance,review_ticket_decomposition --evidence '{"approved":true}'
 ```
 
 ### 6. Create tickets inline (replaces separate tickets agent)
 
-Parse the `TICKETS_JSON:` block from the plan agent's output. For each ticket:
+Parse the `TICKETS_JSON:` block from the plan agent's output. Use parallel API calls where possible.
 
-**a. Check for duplicates:**
+**a. Parallel duplicate checks:**
+Launch ALL duplicate checks simultaneously:
 ```
-mcp__plugin_linear_linear__list_issues({ query: "<title keywords>", team: "POWR", limit: 5 })
+# All in parallel:
+mcp__plugin_linear_linear__list_issues({ query: "<title keywords for ticket 1>", team: "POWR", limit: 5 })
+mcp__plugin_linear_linear__list_issues({ query: "<title keywords for ticket 2>", team: "POWR", limit: 5 })
+...
 ```
-- If duplicate found (Done/In Progress/Todo) → skip, note in summary
+- If duplicate found (Done/In Progress/Todo) → mark as skip
 
-**b. Create the ticket:**
+**b. Create non-duplicate tickets:**
+For tickets without dependencies on each other, create in parallel:
 ```
 mcp__plugin_linear_linear__save_issue({
   title: "<title>",
@@ -166,9 +169,9 @@ mcp__plugin_linear_linear__save_issue({
 })
 ```
 
-**c. Set dependencies** using `blockedBy` on subsequent `save_issue` calls.
+For tickets with `blockedBy` dependencies, create sequentially (need the ID of the blocking ticket first).
 
-**d. Create per-ticket plan document:**
+**c. Create per-ticket plan documents** (all in parallel after ticket IDs are known):
 ```
 mcp__plugin_linear_linear__create_document({
   title: "Plan: <ticket-id> — <title>",
@@ -176,7 +179,7 @@ mcp__plugin_linear_linear__create_document({
 })
 ```
 
-**e. Write summary JSON** to `.claude/ticket-summaries/<feature-name>.json`:
+**d. Write summary JSON** to `.claude/ticket-summaries/<feature-name>.json`:
 ```json
 {
   "feature": "<feature-name>",
@@ -200,6 +203,29 @@ Tell user: "Tickets created. Type `/powr execute` to start building." Do NOT con
 ---
 
 ## /powr execute
+
+### Dry-run mode
+
+If the user passes `--dry-run` (e.g., `/powr execute --dry-run` or `/powr execute project "MVP" --dry-run`), do NOT spawn any agents or modify any state. Instead:
+
+1. Resolve scope (same as normal)
+2. Pre-fetch ticket details (same as normal)
+3. Run resume check — show which tickets would be skipped
+4. Classify tickets — show fast-path vs normal
+5. Build dependency waves — show wave breakdown
+6. Show routing decisions per ticket:
+   ```
+   Dry-run execution plan:
+   | Ticket   | Type      | Investigate Agent | Implement Agent       | Route    |
+   |----------|-----------|-------------------|-----------------------|----------|
+   | POWR-500 | normal    | powr-investigate  | powr-implement-complex| wave 1   |
+   | POWR-501 | fast-path | (skip)            | powr-implement        | wave 1   |
+   | POWR-502 | normal    | powr-investigate-haiku | powr-implement   | wave 1   |
+
+   Execution mode: batch (1 wave, all independent)
+   Estimated agents: 8
+   ```
+7. STOP. Do not execute.
 
 ### Review mode check
 ```bash
@@ -237,6 +263,19 @@ Read the ticket summaries JSON for `impl_steps` per ticket (from the plan):
 Read(".claude/ticket-summaries/<feature>.json")
 ```
 
+### Resume check (skip completed tickets)
+
+Before executing, check each ticket's gate status to support resuming after failures:
+```bash
+powr-workmaxxing gate check-ticket <ticket-id> -w <workflow-id> --json
+```
+
+- If all gates passed (`allPassed: true`) → skip this ticket, log "Ticket <id>: already complete, skipping"
+- If `coderabbit_review` passed but not all gates → partial completion, investigate what's missing
+- If no gates passed → normal execution
+
+This allows `/powr execute` to resume seamlessly after a crash, context limit, or partial failure.
+
 ### Classify tickets
 
 For each ticket, check fast-path eligibility:
@@ -263,6 +302,19 @@ When executing 2+ tickets, choose between **batch worktrees** (parallel) and **p
 3. **If multiple waves exist** (tickets depend on each other) → use **Pipelined execution** (below) for tickets within waves that have only one ticket, and batch worktrees for waves with 2+ tickets.
 
 Log: "Dependency analysis: <N> wave(s). Routing to <batch|pipelined|mixed>."
+
+### Shared codebase context (multi-ticket only)
+
+When executing 2+ tickets, accumulate a `codebase_context` string that carries forward discoveries from previous investigations. After each investigation completes, extract key findings (files, patterns, types) and append them to `codebase_context`. Pass this to the next investigate agent so it doesn't rediscover the same patterns.
+
+Format:
+```
+Previous investigations found:
+- <ticket-id>: key files: <paths>. Patterns: <patterns>. Types: <types>.
+- <ticket-id>: ...
+```
+
+Keep it compact (< 500 tokens). Only include structural discoveries, not implementation details.
 
 ### Pipelined execution (for dependent tickets)
 
@@ -320,11 +372,7 @@ powr-workmaxxing gate record ticket_in_progress --ticket <ticket-id> --evidence 
 powr-workmaxxing gate record investigation --ticket <ticket-id> --evidence '{"documented":true,"fastPath":true}'
 ```
 
-**Normal tickets:** Read model signals and spawn investigate agent:
-```bash
-powr-workmaxxing model-signals <ticket-id> --repo "$CLAUDE_PROJECT_DIR"
-```
-Choose agent file per decision table:
+**Normal tickets:** Choose investigate agent from pre-fetched data (no CLI call needed):
 - **powr-investigate-haiku** if `estimate <= 1` OR `labels` includes `"bug-fix"`
 - **powr-investigate** (default, sonnet) otherwise
 
@@ -340,6 +388,7 @@ Agent(subagent_type="<chosen-agent-file>", prompt="
   Dependencies: <deps>
   Project: <project>
   Project context: <project_context>
+  Codebase context: <codebase_context or 'none — first ticket'>
 ")
 ```
 
@@ -347,10 +396,8 @@ Agent(subagent_type="<chosen-agent-file>", prompt="
 powr-workmaxxing gate record investigation --ticket <ticket-id> --evidence '{"documented":true}'
 ```
 
-#### 4. Route implementation agent
-```bash
-powr-workmaxxing model-signals <ticket-id> --repo "$CLAUDE_PROJECT_DIR"
-```
+#### 4. Route implementation agent (inline — no CLI call)
+Use the `Complexity` value from the investigate agent's output:
 - **Simple** complexity → `powr-implement`
 - **Moderate/Complex/null** → `powr-implement-complex`
 - **Fast-path** tickets → `powr-implement` (simple by definition)
@@ -375,7 +422,20 @@ Agent(subagent_type="<chosen-agent>", prompt="
 powr-workmaxxing gate record code_committed --ticket <ticket-id> --evidence '{"commitSha":"<sha>"}'
 ```
 
-#### 6. Code review
+#### 6. Run tests
+
+```bash
+powr-workmaxxing repo test --repo "$CLAUDE_PROJECT_DIR"
+```
+
+If tests pass:
+```bash
+powr-workmaxxing gate record tests_passed --ticket <ticket-id> --evidence '{"testCommand":"<command>"}'
+```
+
+If tests fail: pass the failure output back to the implement agent for a targeted fix, then re-run tests. Do not proceed to code review until tests pass.
+
+#### 7. Code review
 ```
 mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Review" })
 ```
@@ -399,13 +459,25 @@ Agent(subagent_type="<chosen-agent-file>", prompt="
 ")
 ```
 
-If verdict is "Changes requested": re-implement with feedback, then re-review.
+**If verdict is "Changes requested":** Do NOT re-spawn the full implement agent. Instead, spawn a targeted fix:
+```
+Agent(subagent_type="powr-implement", prompt="
+  Ticket: <ticket-id>
+  UUID: <uuid>
+  Title: <title>
+  Mode: targeted-fix
+  Review feedback: <specific issues from review verdict>
+  Files to fix: <file:line references from review>
+  Review mode: <on|off>
+")
+```
+Then re-run tests (step 6) and re-review. Maximum 2 retry cycles — if still failing, hand off with issues noted.
 
 ```bash
 powr-workmaxxing gate record coderabbit_review --ticket <ticket-id> --evidence '{"documented":true}'
 ```
 
-#### 7. Hand off
+#### 8. Hand off
 Try "In Human Review" first, fall back to "In Review":
 ```
 mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Human Review" })
@@ -471,6 +543,23 @@ After final wave:
 powr-workmaxxing gate record all_tickets_done --evidence '{}'
 powr-workmaxxing advance
 ```
+
+### Execution summary
+
+After ALL tickets complete (single, pipelined, or batch), print a summary table:
+
+```
+Execution complete.
+
+| Ticket   | Title              | Status         | Route      | Gates              |
+|----------|--------------------|----------------|------------|--------------------|
+| POWR-500 | Add OAuth flow     | In Human Review| pipelined  | 5/5 passed         |
+| POWR-501 | Fix login bug      | In Human Review| fast-path  | 5/5 passed         |
+| POWR-502 | Refactor auth      | Blocked        | batch      | 3/5 (tests failed) |
+
+Completed: 2/3 | Blocked: 1/3
+```
+
 Tell user: "All tickets executed. Type `/powr ship` to verify and ship."
 
 ---

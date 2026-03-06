@@ -46,7 +46,8 @@ describe("validateTransition", () => {
   it("allows valid ticket transitions", () => {
     expect(validateTransition(ticketStages, "QUEUED", "INVESTIGATING").valid).toBe(true);
     expect(validateTransition(ticketStages, "INVESTIGATING", "IMPLEMENTING").valid).toBe(true);
-    expect(validateTransition(ticketStages, "IMPLEMENTING", "CODE_REVIEWING").valid).toBe(true);
+    expect(validateTransition(ticketStages, "IMPLEMENTING", "TESTING").valid).toBe(true);
+    expect(validateTransition(ticketStages, "TESTING", "CODE_REVIEWING").valid).toBe(true);
     expect(validateTransition(ticketStages, "CODE_REVIEWING", "DONE").valid).toBe(true);
   });
 
@@ -178,6 +179,7 @@ describe("getTransitionChain", () => {
       "QUEUED",
       "INVESTIGATING",
       "IMPLEMENTING",
+      "TESTING",
       "CODE_REVIEWING",
       "DONE",
     ]);

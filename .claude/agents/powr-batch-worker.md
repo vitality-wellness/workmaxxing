@@ -84,7 +84,20 @@ powr-workmaxxing gate record ticket_in_progress -w <workflow_id> --ticket <ticke
   ```
 - The `code_committed` gate auto-records via post-commit hook.
 
-## Step 4: Review
+## Step 4: Run tests
+
+```bash
+powr-workmaxxing repo test --repo "$(pwd)"
+```
+
+If tests pass:
+```bash
+powr-workmaxxing gate record tests_passed -w <workflow_id> --ticket <ticket_id> --evidence '{"testCommand":"auto"}'
+```
+
+If tests fail: fix the failing tests based on the error output, re-commit, and re-run. Maximum 2 retry attempts.
+
+## Step 5: Review
 
 - Set to In Review:
   ```

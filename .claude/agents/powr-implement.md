@@ -23,7 +23,9 @@ You receive:
 
 ## Process
 
-### 1. Read investigation findings
+### 1. Read context
+
+**Targeted-fix mode** (when `mode` is "targeted-fix"): Skip investigation context. Read the `review_feedback` and `files_to_fix` from the prompt. Only modify the specific files/lines flagged. Do NOT refactor or change anything beyond what was requested.
 
 **Normal mode:** Read the ticket from Linear to get the investigation document (created by the investigate agent). Understand the recommended approach, affected files, and risks. Ticket details are provided in the prompt — do NOT call `get_issue` unless you need additional context.
 

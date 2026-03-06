@@ -22,6 +22,7 @@ export const GATE_EVIDENCE_EXAMPLES: Record<string, string> = {
   ticket_in_progress: '{"linearIssueId": "PROJ-123"}',
   investigation: '{"commentUrl": "optional"}',
   code_committed: '{"commitSha": "abc1234"}',
+  tests_passed: '{"testCommand": "flutter test"}',
   coderabbit_review: '{"reviewUrl": "optional"}',
 };
 
@@ -46,6 +47,7 @@ const GATE_EVIDENCE_SCHEMAS: Record<string, z.ZodType> = {
   ticket_in_progress: z.object({ linearIssueId: z.string() }),
   investigation: z.object({ commentUrl: z.string().optional() }).passthrough(),
   code_committed: z.object({ commitSha: z.string() }).passthrough(),
+  tests_passed: z.object({ testCommand: z.string() }).passthrough(),
   coderabbit_review: z
     .object({ reviewUrl: z.string().optional() })
     .passthrough(),

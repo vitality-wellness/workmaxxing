@@ -140,7 +140,11 @@ You:    /powr execute cycle "Sprint 12"        ← all tickets in a cycle
 You:    /powr execute project "MVP Launch"     ← all tickets in a project
 ```
 
-**Single ticket:** Claude sets the ticket to In Progress (auto-records the `ticket_in_progress` gate), investigates the codebase, implements, commits (auto-records `code_committed` with the real SHA), runs CodeRabbit review (sets ticket to "In Review"), then after review completes sets it to "In Human Review" for you to verify. Four quality gates per ticket — it can't skip any of them. Tickets stay in "In Human Review" until you ship. Each step posts its findings directly as a comment on the Linear ticket, building a visible timeline of investigation, implementation, and review.
+**Single ticket:** Claude sets the ticket to In Progress, investigates the codebase, implements, runs the test suite, then runs CodeRabbit review. Five quality gates per ticket — it can't skip any of them. If tests fail, Claude fixes the code and re-runs before review starts. Tickets stay in "In Human Review" until you ship.
+
+**Resumable:** If execution fails mid-batch (context limit, crash, network error), just run `/powr execute` again. It checks gate status per ticket and skips anything already completed.
+
+**Dry run:** `/powr execute --dry-run` shows the full execution plan without running anything — ticket routing, agent choices, dependency waves.
 
 **Batch:** Claude builds a dependency graph, groups independent tickets into waves, and runs each wave in parallel worktrees. It shows you the plan:
 
@@ -249,11 +253,11 @@ You also need hooks in `.claude/settings.local.json`:
 
 ## Quality gates
 
-Every ticket goes through 4 mandatory gates, scoped per-ticket:
+Every ticket goes through 5 mandatory gates, scoped per-ticket:
 
 ```
-IN PROGRESS → INVESTIGATE → IMPLEMENT → CODE REVIEW ("In Review") → "In Human Review" → Done (at ship)
-                                                                  ↘ "Blocked: Manual Action" (if non-code work needed)
+IN PROGRESS → INVESTIGATE → IMPLEMENT → TEST → CODE REVIEW ("In Review") → "In Human Review" → Done (at ship)
+                                                                          ↘ "Blocked: Manual Action" (if non-code work needed)
 ```
 
 | Gate | What happens | Enforced by |
@@ -261,6 +265,7 @@ IN PROGRESS → INVESTIGATE → IMPLEMENT → CODE REVIEW ("In Review") → "In 
 | **Ticket in progress** | Set ticket to In Progress in Linear | **Auto-records** via `auto-record-status` hook |
 | **Investigation** | Explore codebase, post findings | Edit/Write blocked on production files until posted |
 | **Code committed** | Implement + commit | **Auto-records** via `post-commit` hook with real SHA |
+| **Tests passed** | Run repo test suite, verify implementation | Must pass before code review starts |
 | **Code review** | CodeRabbit review (or Claude self-review if CodeRabbit not installed) | Post-commit hook repeats until satisfied |
 
 When code review starts, Claude sets the ticket to **"In Review"**. After review completes, it moves to **"In Human Review"** — signaling it's waiting on a person. Marking Done happens during the ship phase.
@@ -318,11 +323,11 @@ Every ticket is validated before creation:
 
 Only production code is gated:
 
-| Repo | Gated paths | Static analysis |
-|---|---|---|
-| powr-frontend | `lib/`, `ios/` | `dart analyze` |
-| powr-api | `internal/`, `cmd/` | `go vet ./...` |
-| website | `src/` | `npm run build` |
+| Repo | Gated paths | Static analysis | Tests |
+|---|---|---|---|
+| powr-frontend | `lib/`, `ios/` | `dart analyze` | `flutter test` |
+| powr-api | `internal/`, `cmd/` | `go vet ./...` | `go test ./...` |
+| website | `src/` | `npm run build` | `npm test` |
 
 Configured in `~/.powr/repos.json`.
 
@@ -386,7 +391,7 @@ Content stays in subagent contexts — only ticket IDs and brief summaries flow 
 
 ### Dynamic model selection
 
-The orchestrator routes tasks to cheaper models when the work doesn't need top-tier reasoning. Signal extraction (`powr-workmaxxing model-signals`) reads ticket estimates, labels, complexity ratings, and diff sizes, then the orchestrator spawns the appropriate agent variant:
+The orchestrator routes tasks to cheaper models when the work doesn't need top-tier reasoning. For investigate and implement routing, the orchestrator uses pre-fetched ticket data directly (no CLI call). Only code-review routing calls `model-signals --diff` since diff stats require post-implementation data:
 
 | Agent | Haiku variant | When |
 |---|---|---|
@@ -400,7 +405,7 @@ Implementation routing uses separate agents: `powr-implement` (sonnet) for Simpl
 
 ```
 Feature:  SPECCING → PLANNING → REVIEWING → TICKETING → EXECUTING → SHIPPING → IDLE
-Ticket:   QUEUED → INVESTIGATING → IMPLEMENTING → CODE_REVIEWING → DONE
+Ticket:   QUEUED → INVESTIGATING → IMPLEMENTING → TESTING → CODE_REVIEWING → DONE
 ```
 
 During CODE_REVIEWING, tickets are "In Review". After review, they move to "In Human Review". During SHIPPING, they're marked Done.
@@ -457,6 +462,7 @@ powr-workmaxxing
   bypass                              Skip enforcement
 
   gate record <name> [--ticket] [--evidence]  Record a gate (ticket-scoped)
+  gate record-batch <names> [--ticket] [--evidence]  Record multiple gates at once (comma-separated)
   gate check <name>                   Check gate (exit code)
   gate check-ticket <id>              Check all ticket gates at once
   gate list [--json]                  Gates for current stage
@@ -473,6 +479,7 @@ powr-workmaxxing
   tickets validate --json '{...}'     Validate ticket fields
 
   repo analyze                        Run static analysis
+  repo test                           Run test suite
   repo info [--json]                  Show repo config
   repo set <key> <value>              Set repo config field (e.g. reviewMode true)
 

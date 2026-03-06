@@ -78,6 +78,11 @@ const TICKET_STAGES: Record<string, StageConfig> = {
   IMPLEMENTING: {
     description: "Writing code and committing changes",
     requiredGates: ["code_committed"],
+    nextStage: "TESTING",
+  },
+  TESTING: {
+    description: "Running test suite to verify implementation",
+    requiredGates: ["tests_passed"],
     nextStage: "CODE_REVIEWING",
   },
   CODE_REVIEWING: {
