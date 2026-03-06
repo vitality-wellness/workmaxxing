@@ -73,11 +73,31 @@ Use this format for the content:
 ## Overview
 Brief summary of the approach.
 
+## Self-Review
+
+Analyze the plan against these 5 quality sections. For each, state "OK" or list specific issues with severity (Critical / Warning / Suggestion).
+
+### Architecture
+Component boundaries, coupling, data flow, security implications.
+
+### Code Quality
+DRY violations, error handling, edge cases, over/under-engineering.
+
+### Tests
+Coverage gaps, assertion quality, failure mode coverage.
+
+### Performance
+N+1 queries, memory usage, caching opportunities, algorithm complexity.
+
+### Ticket Decomposition
+Clean boundaries, dependency ordering, AC clarity, appropriate scope per ticket.
+
 ## Tickets
 
 ### Ticket 1: <title>
 **Priority:** P1/P2/P3
-**Estimate:** S/M/L
+**Estimate:** 1-8 (Linear story points)
+**Labels:** feature, bug-fix, refactor, etc.
 **Dependencies:** none | Ticket N
 
 #### Description
@@ -109,9 +129,32 @@ Ticket 1 → Ticket 2 → Ticket 3
 
 ### 5. Return
 
-Return exactly:
+Return a structured response with three blocks:
+
 ```
 PLAN_COMPLETE: <document-id>
+
+SELF_REVIEW:
+Architecture: OK
+Code Quality: OK
+Tests: Warning — <brief description>
+Performance: OK
+Ticket Decomposition: OK
+
+TICKETS_JSON:
+[
+  {
+    "title": "Add OAuth provider",
+    "description": "Integrate OAuth2 with Google and GitHub providers.\n\n## Acceptance Criteria\n- [ ] OAuth login works with Google\n- [ ] OAuth login works with GitHub",
+    "priority": 2,
+    "estimate": 3,
+    "labels": ["feature"],
+    "deps": [],
+    "impl_steps": "1. Create auth service\n2. Add provider config\n3. Wire up callbacks"
+  }
+]
 ```
 
-Where `<document-id>` is the ID returned by `create_document`.
+- `<document-id>` is the ID returned by `create_document`
+- SELF_REVIEW contains one line per section with "OK" or "<Severity> — <description>"
+- TICKETS_JSON is valid JSON array with ticket specs for the orchestrator to create inline

@@ -2,12 +2,12 @@
 name: powr
 description: Development workflow engine. Handles the full lifecycle — spec, plan, execute, ship. Use when the user says "/powr" followed by a subcommand (spec, plan, execute, ship) or when they want to start, plan, build, or ship a feature.
 argument-hint: <spec | plan | execute | ship> [args]
-allowed-tools: Bash, Agent, Read, Write, AskUserQuestion, mcp__plugin_linear_linear__save_issue, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__list_projects
+allowed-tools: Bash, Agent, Read, Write, AskUserQuestion, mcp__plugin_linear_linear__save_issue, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__get_document, mcp__plugin_linear_linear__list_projects, mcp__plugin_linear_linear__create_document
 ---
 
 # /powr — Orchestrator
 
-Manages the workflow lifecycle by spawning specialized subagents. Each subagent posts its own findings directly to Linear as comments. Only ticket IDs and brief summaries flow through here.
+Manages the workflow lifecycle by spawning specialized subagents. Each subagent creates a Linear Document with its findings and posts a short linking comment on the ticket timeline. Only ticket IDs and brief summaries flow through here.
 
 ## Decision Tree
 
@@ -30,7 +30,7 @@ Parse the user's subcommand and follow the corresponding section below.
 Every AskUserQuestion requires a real, non-empty response. If empty/blank: do NOT proceed, do NOT infer, do NOT retry AskUserQuestion. Ask the same question in plain chat text instead.
 
 ### Linear Status Changes
-Make direct calls for simple status updates (`save_issue` state changes). Subagents post their own findings directly to Linear as comments — no separate writer step needed.
+Make direct calls for simple status updates (`save_issue` state changes). Subagents create Linear Documents for their findings and post short linking comments on the ticket timeline.
 
 ### Handoffs
 Spec and plan documents are stored as Linear Documents. Pass document IDs (not content) to the next subagent.
@@ -101,24 +101,39 @@ Agent(subagent_type="powr-plan", prompt="
   Spec document ID: <spec-document-id>
   Repo: $CLAUDE_PROJECT_DIR
   Team: POWR
+  Project: <project-name>
 ")
 ```
-Returns `PLAN_COMPLETE: <document-id>`.
+Returns three blocks: `PLAN_COMPLETE: <document-id>`, `SELF_REVIEW:`, and `TICKETS_JSON:`.
 
 ### 3. Record plan gate
 ```bash
 powr-workmaxxing gate record plan_written --evidence '{"documentId":"<plan-document-id>"}'
 ```
 
-### 4. Spawn review agent
-```
-Agent(subagent_type="powr-review", prompt="
-  Plan document ID: <plan-document-id>
-")
-```
-Returns approval or revision request.
+### 4. Present self-review to user (replaces separate review agent)
 
-**If revisions needed:** Spawn `powr-plan` again with the feedback, then `powr-review` again. Repeat until approved.
+Parse the `SELF_REVIEW:` block from the plan agent's output. Present all 5 sections to the user using `AskUserQuestion`:
+
+```
+Plan self-review:
+- Architecture: <finding>
+- Code Quality: <finding>
+- Tests: <finding>
+- Performance: <finding>
+- Ticket Decomposition: <finding>
+
+Approve all sections, or flag any for revision?
+```
+
+- **If user approves** → continue to step 5
+- **If user requests revisions** → spawn `powr-plan` again with feedback, go back to step 3
+- **If user wants a deep review** → spawn `powr-review` agent as a fallback:
+  ```
+  Agent(subagent_type="powr-review", prompt="
+    Plan document ID: <plan-document-id>
+  ")
+  ```
 
 ### 5. Record review gates
 ```bash
@@ -129,24 +144,53 @@ powr-workmaxxing gate record review_performance --evidence '{"approved":true}' &
 powr-workmaxxing gate record review_ticket_decomposition --evidence '{"approved":true}'
 ```
 
-### 6. Advance to ticketing
-```bash
-powr-workmaxxing advance  # REVIEWING → TICKETING
+### 6. Create tickets inline (replaces separate tickets agent)
+
+Parse the `TICKETS_JSON:` block from the plan agent's output. For each ticket:
+
+**a. Check for duplicates:**
+```
+mcp__plugin_linear_linear__list_issues({ query: "<title keywords>", team: "POWR", limit: 5 })
+```
+- If duplicate found (Done/In Progress/Todo) → skip, note in summary
+
+**b. Create the ticket:**
+```
+mcp__plugin_linear_linear__save_issue({
+  title: "<title>",
+  team: "POWR",
+  description: "<description from JSON>",
+  priority: <priority>,
+  estimate: <estimate>,
+  project: "<project>"
+})
 ```
 
-### 7. Spawn tickets agent
-```
-Agent(subagent_type="powr-tickets", prompt="
-  Plan document ID: <plan-document-id>
-  Team: POWR
-  Project: <project-name>
-")
-```
-Returns ticket summaries JSON path and ticket IDs.
+**c. Set dependencies** using `blockedBy` on subsequent `save_issue` calls.
 
-### 8. Record and advance
+**d. Create per-ticket plan document:**
+```
+mcp__plugin_linear_linear__create_document({
+  title: "Plan: <ticket-id> — <title>",
+  content: "# <title>\n\n<description>\n\n## Implementation Steps\n<impl_steps from JSON>"
+})
+```
+
+**e. Write summary JSON** to `.claude/ticket-summaries/<feature-name>.json`:
+```json
+{
+  "feature": "<feature-name>",
+  "tickets": [
+    { "id": "POWR-500", "title": "...", "summary": "...", "priority": 2, "estimate": 3, "labels": ["feature"], "deps": [], "status": "created" }
+  ],
+  "skipped": []
+}
+```
+
+### 7. Record and advance
 ```bash
 powr-workmaxxing gate record tickets_created --evidence '{"ticketIds":["POWR-500","POWR-501"]}'
+powr-workmaxxing advance  # REVIEWING → TICKETING
 powr-workmaxxing advance  # TICKETING → EXECUTING
 ```
 
@@ -172,10 +216,74 @@ Note the `reviewMode` value for per-ticket workflow.
 | `/powr execute cycle "Sprint 12"` | Batch — all tickets in cycle |
 | `/powr execute project "MVP"` | Batch — all tickets in project |
 
-### Single ticket: chained subagents
+### Pre-fetch ticket details
 
-#### 1. Review mode branch
-If `reviewMode` is true, create a feature branch:
+For ALL tickets in scope, pre-fetch full details upfront:
+```
+mcp__plugin_linear_linear__get_issue({ id: "<ticket-id>", includeRelations: true })
+```
+Store for each: `title`, `description`, `acceptance_criteria`, `labels`, `estimate`, `dependencies`, `uuid`.
+
+Also fetch project context once (shared across all agents):
+```
+mcp__plugin_linear_linear__list_issues({ project: "<project>", team: "POWR" })
+```
+Summarize as `project_context`: a compact list of recent/upcoming ticket titles and statuses.
+
+Read the ticket summaries JSON for `impl_steps` per ticket (from the plan):
+```
+Read(".claude/ticket-summaries/<feature>.json")
+```
+
+### Classify tickets
+
+For each ticket, check fast-path eligibility:
+- **Fast-path**: `estimate <= 1` AND `labels` includes `"bug-fix"` → skip investigation entirely
+- **Normal**: everything else → full investigate → implement flow
+
+Log: "Ticket <id>: <fast-path|normal>"
+
+### Single ticket execution
+
+If only one ticket in scope, follow the **Execute one ticket** procedure below, then hand off.
+
+### Multi-ticket execution (pipelined)
+
+When executing 2+ tickets, use pipeline parallelism to overlap code-review with the next ticket's investigation.
+
+**Flow:**
+
+```
+T1: investigate → implement
+T1+T2: code-review(T1) ‖ investigate(T2)  ← parallel
+T2: implement
+T2+T3: code-review(T2) ‖ investigate(T3)  ← parallel
+...
+T_last: implement → code-review
+```
+
+**Algorithm:**
+
+1. Execute the first ticket through investigate → implement (see "Execute one ticket" below, stopping after implement).
+2. For each subsequent ticket T_next:
+   a. Launch in **parallel**:
+      - code-review for the **previous** ticket
+      - investigate (or fast-path prep) for T_next
+   b. Wait for both to complete.
+   c. Handle code-review result for previous ticket:
+      - "Approved" → record gates, hand off
+      - "Changes requested" → re-implement + re-review (T_next's investigation is already done, no time wasted)
+   d. Implement T_next using the completed investigation.
+3. After the last ticket's implementation, run code-review alone (no next ticket to overlap with).
+4. Hand off the last ticket.
+
+---
+
+### Execute one ticket (shared procedure)
+
+Used by both single-ticket and multi-ticket flows.
+
+#### 1. Branch (if review mode)
 ```bash
 git checkout -b feat/<ticket-id>-<short-description>
 ```
@@ -188,100 +296,105 @@ mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Progress" 
 powr-workmaxxing gate record ticket_in_progress --ticket <ticket-id> --evidence '{}'
 ```
 
-#### 3. Read model signals (pre-investigation)
+#### 3. Investigate (skip if fast-path)
+
+**Fast-path tickets:** Skip investigation. Record the gate and go to step 5.
+```bash
+powr-workmaxxing gate record investigation --ticket <ticket-id> --evidence '{"documented":true,"fastPath":true}'
+```
+
+**Normal tickets:** Read model signals and spawn investigate agent:
 ```bash
 powr-workmaxxing model-signals <ticket-id> --repo "$CLAUDE_PROJECT_DIR"
 ```
-Parse the JSON output to get `estimate`, `labels`, and `complexity` (complexity will be null before investigation — this is expected). Use the decision table (see "Dynamic Model Selection" in Global Rules) to choose the agent file for investigation:
-- **powr-investigate-haiku** if `estimate <= 1` OR `labels` includes `"bug-fix"` — small/bug tickets need only find-and-report investigation
-- **powr-investigate** (default, sonnet) otherwise, including when estimate is null — unknown scope means unknown complexity; default to the safer tier
+Choose agent file per decision table:
+- **powr-investigate-haiku** if `estimate <= 1` OR `labels` includes `"bug-fix"`
+- **powr-investigate** (default, sonnet) otherwise
 
-Log the decision: "Agent file for investigation: <agentFile> -- <reason>"
-
-#### 4. Investigate
 ```
 Agent(subagent_type="<chosen-agent-file>", prompt="
   Ticket: <ticket-id>
-  Description: <brief description>
+  Title: <title>
+  Description: <description>
+  Acceptance criteria: <ACs>
+  Labels: <labels>
+  Estimate: <estimate>
+  Dependencies: <deps>
   Project: <project>
+  Project context: <project_context>
 ")
 ```
-Returns complexity assessment. The agent posts its findings directly to Linear as a comment.
 
 ```bash
 powr-workmaxxing gate record investigation --ticket <ticket-id> --evidence '{"documented":true}'
 ```
 
-#### 5. Read model signals (post-investigation) and route implement agent
+#### 4. Route implementation agent
 ```bash
 powr-workmaxxing model-signals <ticket-id> --repo "$CLAUDE_PROJECT_DIR"
 ```
-Parse JSON to get the updated `complexity`. Route the implementation agent:
-- **Simple** complexity → `subagent_type="powr-implement"` (Sonnet — bounded, well-understood implementation)
-- **Moderate/Complex/null** → `subagent_type="powr-implement-complex"` (inherit — architectural decisions, cross-cutting changes, or unknown scope)
+- **Simple** complexity → `powr-implement`
+- **Moderate/Complex/null** → `powr-implement-complex`
+- **Fast-path** tickets → `powr-implement` (simple by definition)
 
-Note: this is an agent routing decision, not a model override. The two agents have different system prompts optimized for their complexity tier.
-
-Log the decision: "Implementation routing: <agent> -- <reason>"
-
-#### 6. Implement
+#### 5. Implement
 ```
 Agent(subagent_type="<chosen-agent>", prompt="
   Ticket: <ticket-id>
   Title: <title>
-  Acceptance criteria: <ACs from ticket>
+  Description: <description>
+  Acceptance criteria: <ACs>
+  Labels: <labels>
+  Estimate: <estimate>
   Review mode: <on|off>
+  Fast path: <true|false>
+  Impl steps: <impl_steps from ticket summaries>
 ")
 ```
-The agent posts its implementation summary directly to Linear as a comment.
 
 ```bash
 powr-workmaxxing gate record code_committed --ticket <ticket-id> --evidence '{"commitSha":"<sha>"}'
 ```
 
-#### 7. Read diff signals and code review
+#### 6. Code review
 ```
 mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Review" })
 ```
 
-Read diff stats for agent file selection:
+Read diff stats:
 ```bash
 powr-workmaxxing model-signals <ticket-id> --repo "$CLAUDE_PROJECT_DIR" --diff
 ```
-Parse JSON to get `diffStats`. Use the decision table to choose the agent file for code review:
-- **powr-code-review-haiku** if `diffStats.files === 1` AND `(diffStats.insertions + diffStats.deletions) < 50` — a single-screen change is pure pattern-matching
-- **powr-code-review** (default, sonnet) if multiple files OR >= 50 changed lines — multi-file diffs need cross-file reasoning
-- **powr-code-review** (default, sonnet) if `diffStats` is null — can't assess scope, default to safer tier
-
-Log the decision: "Agent file for code review: <agentFile> -- <reason>"
+Choose agent file per decision table:
+- **powr-code-review-haiku** if 1 file AND < 50 changed lines
+- **powr-code-review** (default, sonnet) otherwise
 
 ```
 Agent(subagent_type="<chosen-agent-file>", prompt="
   Ticket: <ticket-id>
   Title: <title>
+  Description: <description>
+  Acceptance criteria: <ACs>
   Review mode: <on|off>
 ")
 ```
-The agent posts its review findings directly to Linear as a comment.
-If verdict is "Changes requested," loop: spawn implement again with review feedback, then re-review. Re-read diff signals and re-select the agent file before each re-review.
+
+If verdict is "Changes requested": re-implement with feedback, then re-review.
 
 ```bash
 powr-workmaxxing gate record coderabbit_review --ticket <ticket-id> --evidence '{"documented":true}'
 ```
 
-#### 8. Hand off
-Try "In Human Review" first. If the status doesn't exist on the team, fall back to "In Review":
+#### 7. Hand off
+Try "In Human Review" first, fall back to "In Review":
 ```
 mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Human Review" })
 ```
-If that fails (status not found), use:
-```
-mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Review" })
-```
-If review mode: tell user "Changes staged on branch `feat/<ticket-id>-<desc>`. Please review, commit, and create a PR."
+
+If review mode: tell user "Changes staged on branch `feat/<ticket-id>-<desc>`."
 
 #### Blocked: Manual Action
-If at any point a ticket requires non-code human action: the executing agent will post a comment on the ticket explaining what's needed. Set to "Blocked: Manual Action", move on to next ticket.
+If a ticket requires non-code human action: the agent posts a comment explaining what's needed. Set to "Blocked: Manual Action", move on to next ticket.
 
 ### Batch: wave-based parallel worktrees
 
@@ -372,7 +485,7 @@ Agent(subagent_type="<chosen-agent-file>", prompt="
 If issues > 0, present findings to user. Wait for resolution.
 If blocked tickets exist, report them separately.
 
-The ship-verify agent posts its ship report directly to Linear as comments on each ticket.
+The ship-verify agent creates a Linear Document with the ship report and posts linking comments on each ticket.
 
 ### 3. Mark tickets Done
 For each ticket currently "In Human Review" or "In Review":

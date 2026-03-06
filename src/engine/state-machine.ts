@@ -9,8 +9,8 @@ import { getWorkflowConfig, type StageConfig } from "./workflow-config.js";
 
 /** Human-readable evidence examples for each gate. Used in error messages and `gate schema`. */
 export const GATE_EVIDENCE_EXAMPLES: Record<string, string> = {
-  spec_document_written: '{"path": ".claude/specs/feature.md"}',
-  plan_written: '{"path": ".claude/plans/feature.md"}',
+  spec_document_written: '{"documentId": "linear-doc-uuid"} or {"path": ".claude/specs/feature.md"}',
+  plan_written: '{"documentId": "linear-doc-uuid"} or {"path": ".claude/plans/feature.md"}',
   review_architecture: '{"approved": true}',
   review_code_quality: '{"approved": true}',
   review_tests: '{"approved": true}',
@@ -27,8 +27,14 @@ export const GATE_EVIDENCE_EXAMPLES: Record<string, string> = {
 
 /** Evidence schemas for each gate. Gates not listed here accept any evidence. */
 const GATE_EVIDENCE_SCHEMAS: Record<string, z.ZodType> = {
-  spec_document_written: z.object({ path: z.string() }),
-  plan_written: z.object({ path: z.string() }),
+  spec_document_written: z.union([
+    z.object({ documentId: z.string() }),
+    z.object({ path: z.string() }),
+  ]),
+  plan_written: z.union([
+    z.object({ documentId: z.string() }),
+    z.object({ path: z.string() }),
+  ]),
   review_architecture: z.object({ approved: z.boolean() }),
   review_code_quality: z.object({ approved: z.boolean() }),
   review_tests: z.object({ approved: z.boolean() }),

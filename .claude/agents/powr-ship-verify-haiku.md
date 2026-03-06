@@ -1,7 +1,7 @@
 ---
 name: powr-ship-verify-haiku
 description: Ship verification agent (haiku tier) for /powr workflow. Verifies all tickets completed their gates, audits the ticket landscape, and runs final checks.
-tools: Read, Bash, Grep, Glob, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__save_comment
+tools: Read, Bash, Grep, Glob, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__create_document, mcp__plugin_linear_linear__save_comment
 model: haiku
 ---
 
@@ -57,12 +57,20 @@ git status --porcelain
 
 No uncommitted or unstaged work.
 
-### 5. Post ship report as a comment on each ticket
+### 5. Create ship report document and post comments
 
-For each ticket, get its internal UUID and post a ship report comment using `mcp__plugin_linear_linear__save_comment`. Format the comment body as:
+Create a single Linear Document with the full ship report:
+```
+mcp__plugin_linear_linear__create_document({
+  title: "Ship Report: <feature>",
+  content: "<report in markdown>"
+})
+```
+
+Use this format for the document content:
 
 ```markdown
-**Ship verified.**
+# Ship Report: <feature>
 
 ## Tickets
 | Ticket | Title | Status | Gates |
@@ -86,6 +94,14 @@ For each ticket, get its internal UUID and post a ship report comment using `mcp
 
 ## Gaps
 - <planned vs actually built comparison>
+```
+
+Then for each ticket, get its internal UUID and post a short timeline comment:
+```
+mcp__plugin_linear_linear__save_comment({
+  issueId: "<uuid>",
+  body: "**Ship verified.** All gates passed.\nSee document \"<title>\" for full report."
+})
 ```
 
 ### 6. Return

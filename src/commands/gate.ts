@@ -86,14 +86,16 @@ gateCommand
         }
       }
 
-      // --- File existence check for spec/plan gates ---
+      // --- File existence check for spec/plan gates (only when path-based evidence) ---
       if (name === "spec_document_written" || name === "plan_written") {
-        const filePath = evidence.path as string;
-        if (!existsSync(filePath)) {
-          console.error(
-            `Error: File "${filePath}" does not exist. The ${name} gate requires a real file path.`
-          );
-          process.exit(2);
+        if (evidence.path) {
+          const filePath = evidence.path as string;
+          if (!existsSync(filePath)) {
+            console.error(
+              `Error: File "${filePath}" does not exist. The ${name} gate requires a real file path.`
+            );
+            process.exit(2);
+          }
         }
       }
 

@@ -91,14 +91,21 @@ describe("checkGates", () => {
 });
 
 describe("validateGateEvidence", () => {
-  it("accepts valid evidence for spec_document_written", () => {
+  it("accepts path evidence for spec_document_written", () => {
     const result = validateGateEvidence("spec_document_written", {
       path: "/plans/test.md",
     });
     expect(result.valid).toBe(true);
   });
 
-  it("rejects invalid evidence for spec_document_written", () => {
+  it("accepts documentId evidence for spec_document_written", () => {
+    const result = validateGateEvidence("spec_document_written", {
+      documentId: "0a26c332-23e2-45fe-9e05-2906dc6f7a62",
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects empty evidence for spec_document_written", () => {
     const result = validateGateEvidence("spec_document_written", {});
     expect(result.valid).toBe(false);
     expect(result.error).toContain("spec_document_written");
