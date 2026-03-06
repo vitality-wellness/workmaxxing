@@ -1,12 +1,51 @@
 # workmaxxing
 
-Your dev workflow in 4 words.
+Your dev workflow, enforced.
 
 ```
-/powr spec → /powr plan → /powr execute → /powr ship
+                ┌──────────────────────────────────────────┐
+                │                                          │
+                ▼                                          │
+          ┌──────────┐     ┌──────────┐     ┌──────────┐  │
+          │   spec   │────▶│   plan   │────▶│ execute  │  │
+          │          │     │          │     │          │  │
+          │interview │     │architect │     │investigate│  │
+          │explore   │     │review    │     │implement │  │
+          │scope     │     │tickets   │     │test      │  │
+          └──────────┘     └──────────┘     │review    │  │
+                                            └────┬─────┘  │
+                                                 │        │
+                                            human tests   │
+                                                 │        │
+                                           ┌─────▼─────┐  │
+                                           │  revise?  │  │
+                                           └──┬─────┬──┘  │
+                                          yes │     │ no  │
+                                              │     │     │
+                                       ┌──────▼──┐  │     │
+                                       │ revise  │  │     │
+                                       │         │  │     │
+                                       │re-invest│  │     │
+                                       │fix      │  │     │
+                                       │review   │  │     │
+                                       └────┬────┘  │     │
+                                            │       │     │
+                                            │  ┌────▼───┐ │
+                                            │  │  ship  │ │
+                                            │  │        │ │
+                                            │  │verify  │ │
+                                            │  │recap   │ │
+                                            │  │done    │ │
+                                            │  └────────┘ │
+                                            │             │
+                                            └─ test again─┘
 ```
 
-That's it. Say the word, Claude handles the rest.
+```
+/powr spec → /powr plan → /powr execute → test → /powr revise? → /powr ship
+```
+
+Say the word, Claude handles the rest.
 
 ## Why this exists
 
@@ -127,8 +166,6 @@ For each section, Claude presents its findings and a recommendation. You can app
 
 Before creating each ticket, it checks Linear across **all statuses** — done, in progress, in review, todo, backlog, canceled. No duplicates, no re-doing finished work.
 
-After tickets are created, the spec file is cleaned up — it's been fully absorbed into the plan and tickets.
-
 **When it's done:** "Tickets created. Type `/powr execute` to start building."
 
 ### Step 3: `/powr execute` — build the tickets
@@ -163,9 +200,25 @@ Start wave 1?
 
 You approve. It launches. Wave 1 finishes, merges to main, wave 2 starts. You approve each wave.
 
-**When it's done:** "All tickets complete. Type `/powr ship` to wrap up."
+**When it's done:** "All tickets executed. Use `/powr ship` to verify and ship, or `/powr revise <ticket-id>` if something needs fixing after testing."
 
-### Step 4: `/powr ship` — verify, mark done, and close
+### Step 4: Test on device
+
+This is the human part. Run the app, test the feature, verify it works as expected. If everything looks good, skip to step 6.
+
+### Step 5: `/powr revise` — fix what's broken (if needed)
+
+```
+You:    /powr revise POWR-500 the scale animation isn't visible, the page stays full size
+```
+
+When human testing finds issues, `/powr revise` re-enters the structured workflow with your feedback. You provide what's wrong — text, screenshots, behavioral observations — and Claude runs the full cycle again: re-investigate (focused on what broke), implement a fix (building on existing code, not starting over), test, code review, hand off.
+
+It tracks revision count on the ticket timeline. If you're on revision #3+, Claude flags that the approach may need rethinking and suggests re-planning instead of another patch.
+
+The loop is: execute → test → revise → test → revise → ... → ship. Each revision is fully structured — investigation, implementation, code review, gates. No falling out of the workflow into unstructured chat.
+
+### Step 6: `/powr ship` — verify, mark done, and close
 
 ```
 You:    /powr ship
@@ -175,17 +228,18 @@ Claude verifies **every ticket passed through all 4 gates** — ticket in progre
 
 Then it audits the ticket landscape — orphaned tickets, in-progress work that should have been completed, planned vs actually built. It runs static analysis and verifies everything is committed.
 
-Once verified, Claude **marks all tickets as Done** in Linear. This is when tickets officially close — after you've had a chance to review the "In Human Review" tickets. It posts a summary and cleans up the plan file.
+Once verified, Claude **marks all tickets as Done** in Linear. This is when tickets officially close — after you've had a chance to review the "In Human Review" tickets. It posts a ship report to Linear and prints a session recap — a plain-English summary of what was concretely accomplished, one sentence per ticket.
 
-**When it's done:** "Workflow complete." That's it. Start the next one whenever you want.
+**When it's done:** "Workflow complete." Start the next one whenever you want.
 
 ---
 
 ## Other commands
 
 ```
-/powr status    Show current stage, gate progress, next action
-/powr bypass    Skip workflow enforcement for this session (just code)
+/powr revise <ticket-id>    Human review found issues — re-investigate, fix, review
+/powr status                Show current stage, gate progress, next action
+/powr bypass                Skip workflow enforcement for this session (just code)
 ```
 
 ```bash
@@ -213,7 +267,7 @@ Everything below is how the system works. You don't need it to use `/powr`.
 
 1. `.claude/hooks/powr-hook.sh` — the unified hook runner
 2. `.claude/skills/powr/` — the workflow skill
-3. `.claude/agents/powr-*.md` — 14 subagent definitions (with file-copy fallback on Windows)
+3. `.claude/agents/powr-*.md` — subagent definitions (with file-copy fallback on Windows)
 
 You also need hooks in `.claude/settings.local.json`:
 
@@ -256,8 +310,12 @@ You also need hooks in `.claude/settings.local.json`:
 Every ticket goes through 5 mandatory gates, scoped per-ticket:
 
 ```
-IN PROGRESS → INVESTIGATE → IMPLEMENT → TEST → CODE REVIEW ("In Review") → "In Human Review" → Done (at ship)
-                                                                          ↘ "Blocked: Manual Action" (if non-code work needed)
+IN PROGRESS → INVESTIGATE → IMPLEMENT → TEST → CODE REVIEW → "In Human Review" → Done (at ship)
+                                                                    │              ↗
+                                                               human tests    /powr ship
+                                                                    │
+                                                              /powr revise ──→ RE-INVESTIGATE → FIX → TEST → REVIEW ─┘
+                                                                    ↘ "Blocked: Manual Action" (if non-code work needed)
 ```
 
 | Gate | What happens | Enforced by |
@@ -305,6 +363,7 @@ Claude checks the full Linear landscape at 8 points in the workflow:
 | **Investigation** | Project context. What was just built. What's coming next. |
 | **Implementation** | Future tickets touching same files. Parallel worktree conflicts. |
 | **Completion** | What this unblocks. |
+| **Revise** | Previous implementation commits. User feedback. What broke and why. |
 | **Ship** | All gates passed per ticket. Orphaned tickets. In-progress work. Planned vs built. Marks tickets Done. |
 
 ---
@@ -371,12 +430,10 @@ You ←→ Claude Code
          ├── /powr skill — lightweight orchestrator (~300 lines, routing only)
          │     ├── Spawns specialized subagents via Agent tool
          │     ├── Bash(powr-workmaxxing <cmd>)  — state machine
-         │     └── Linear MCP                    — tickets
+         │     └── Linear MCP                    — tickets (single source of truth)
          ├── Subagents (.claude/agents/powr-*.md)
          │     ├── powr-spec (opus)              — user interview + spec writing
          │     ├── powr-plan (opus)              — codebase exploration + planning
-         │     ├── powr-review (sonnet)          — 5-section plan review
-         │     ├── powr-tickets (haiku)          — plan → Linear tickets
          │     ├── powr-investigate (sonnet)     — ticket investigation
          │     ├── powr-implement (sonnet)       — code implementation (simple)
          │     ├── powr-implement-complex (inherit) — code implementation (moderate/complex)
@@ -387,7 +444,7 @@ You ←→ Claude Code
                └── sqlite3 ~/.powr/workflow.db   — <50ms queries
 ```
 
-Content stays in subagent contexts — only ticket IDs and brief summaries flow through the orchestrator. Each agent posts its findings directly as comments on the Linear ticket.
+No local file artifacts. Linear is the single source of truth for all ticket data — specs, plans, implementation steps, investigation findings, review reports. The CLI database tracks workflow state and gates. Content stays in subagent contexts — only ticket IDs and brief summaries flow through the orchestrator.
 
 ### Dynamic model selection
 
@@ -406,9 +463,11 @@ Implementation routing uses separate agents: `powr-implement` (sonnet) for Simpl
 ```
 Feature:  SPECCING → PLANNING → REVIEWING → TICKETING → EXECUTING → SHIPPING → IDLE
 Ticket:   QUEUED → INVESTIGATING → IMPLEMENTING → TESTING → CODE_REVIEWING → DONE
+                       ▲                                         │
+                       └─── /powr revise (human found issues) ───┘
 ```
 
-During CODE_REVIEWING, tickets are "In Review". After review, they move to "In Human Review". During SHIPPING, they're marked Done.
+During CODE_REVIEWING, tickets are "In Review". After review, they move to "In Human Review". `/powr revise` re-enters the ticket at INVESTIGATING with human feedback. During SHIPPING, tickets are marked Done.
 
 Declarative config. Zod-typed gate evidence. Can't skip or go backwards.
 
@@ -484,7 +543,6 @@ powr-workmaxxing
   repo set <key> <value>              Set repo config field (e.g. reviewMode true)
 
   model-signals <ticket-id>           Extract signals for model routing
-    [--summaries <path>]                (default: .claude/ticket-summaries/)
     [--diff]                            Include git diff stats
     [--repo <path>]                     Repository path
 

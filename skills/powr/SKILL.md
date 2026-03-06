@@ -1,7 +1,7 @@
 ---
 name: powr
-description: Development workflow engine. Handles the full lifecycle — spec, plan, execute, ship. Use when the user says "/powr" followed by a subcommand (spec, plan, execute, ship) or when they want to start, plan, build, or ship a feature.
-argument-hint: <spec | plan | execute | ship> [args]
+description: Development workflow engine. Handles the full lifecycle — spec, plan, execute, revise, ship. Use when the user says "/powr" followed by a subcommand (spec, plan, execute, revise, ship) or when they want to start, plan, build, fix, or ship a feature.
+argument-hint: <spec | plan | execute | revise | ship> [args]
 allowed-tools: Bash, Agent, Read, Write, AskUserQuestion, mcp__plugin_linear_linear__save_issue, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__get_document, mcp__plugin_linear_linear__list_projects, mcp__plugin_linear_linear__create_document
 ---
 
@@ -15,6 +15,7 @@ Manages the workflow lifecycle by spawning specialized subagents. Each subagent 
 /powr spec <description>     → Spec phase
 /powr plan                   → Plan + review + ticket creation
 /powr execute [target]       → Execute tickets with quality gates
+/powr revise <ticket-id>     → Human review found issues → re-investigate → fix → review
 /powr ship                   → Verify and close out
 /powr status                 → Show workflow state
 /powr bypass                 → Skip workflow enforcement
@@ -36,26 +37,12 @@ Make direct calls for simple status updates (`save_issue` state changes). Subage
 Spec and plan documents are stored as Linear Documents. Pass document IDs (not content) to the next subagent.
 - Spec → Linear Document ID from powr-spec
 - Plan → Linear Document ID from powr-plan
-- `.claude/ticket-summaries/` — compact JSON ticket data (local file)
+- Tickets → Linear issues with full descriptions including impl_steps
 
 ### Context Exhaustion Handoff
 If context is running low during execution (you sense compression is imminent or you're processing many tickets), you MUST output a structured handoff message to the user BEFORE context runs out. This is critical — without it, the user has no idea where to resume.
 
-**Step 1: Persist execution scope** to `.claude/ticket-summaries/<feature>.json` so a fresh session can reconstruct it:
-```json
-{
-  "feature": "...",
-  "executeScope": {
-    "type": "project|cycle|tickets",
-    "value": "MVP Launch",
-    "ticketIds": ["POWR-500", "POWR-501", "POWR-502"]
-  },
-  "tickets": [...]
-}
-```
-Write this `executeScope` field when execution starts (step: Pre-fetch ticket details). It persists across context resets.
-
-**Step 2: Output the handoff message** to the user:
+Output the handoff message to the user:
 ```
 ---
 EXECUTION PAUSED — context limit reached.
@@ -78,7 +65,7 @@ Feature: <feature-name>
 ---
 ```
 
-The resume command lists only incomplete tickets explicitly by ID so it works without any prior context. The full-scope command also works because the resume check skips completed tickets.
+The resume command lists only incomplete tickets explicitly by ID so it works without any prior context. The full-scope command also works because the resume check skips completed tickets. No local state is needed — Linear and the CLI database are the sources of truth, and the resume check queries them fresh.
 
 This also applies when:
 - A batch wave completes but more waves remain
@@ -105,7 +92,7 @@ Log each decision so the user sees which agent file was chosen and why.
 - **Investigate routing**: use pre-fetched `estimate` and `labels` directly. If `estimate <= 1` OR `labels` includes `"bug-fix"` → haiku. Otherwise → sonnet.
 - **Implement routing**: use the `Complexity` returned by the investigate agent. `Simple` → `powr-implement` (sonnet). `Moderate/Complex/null` → `powr-implement-complex` (inherit).
 - **Code-review routing**: this is the ONE case where you must call `model-signals --diff` because diff stats only exist after implementation.
-- **Ship-verify routing**: use ticket count from summaries JSON + gate check results. Both are already available.
+- **Ship-verify routing**: use ticket count from pre-fetched data + gate check results. Both are already available.
 - **Fallback rule**: when any required signal is null, always use the default (sonnet) file. Missing data means unknown scope.
 
 ---
@@ -204,12 +191,12 @@ mcp__plugin_linear_linear__list_issues({ query: "<title keywords for ticket 2>",
 - If duplicate found (Done/In Progress/Todo) → mark as skip
 
 **b. Create non-duplicate tickets:**
-For tickets without dependencies on each other, create in parallel:
+For tickets without dependencies on each other, create in parallel. Include `impl_steps` directly in the ticket description so all data lives in Linear:
 ```
 mcp__plugin_linear_linear__save_issue({
   title: "<title>",
   team: "POWR",
-  description: "<description from JSON>",
+  description: "<description from JSON>\n\n## Implementation Steps\n<impl_steps from JSON>",
   priority: <priority>,
   estimate: <estimate>,
   project: "<project>"
@@ -217,25 +204,6 @@ mcp__plugin_linear_linear__save_issue({
 ```
 
 For tickets with `blockedBy` dependencies, create sequentially (need the ID of the blocking ticket first).
-
-**c. Create per-ticket plan documents** (all in parallel after ticket IDs are known):
-```
-mcp__plugin_linear_linear__create_document({
-  title: "Plan: <ticket-id> — <title>",
-  content: "# <title>\n\n<description>\n\n## Implementation Steps\n<impl_steps from JSON>"
-})
-```
-
-**d. Write summary JSON** to `.claude/ticket-summaries/<feature-name>.json`:
-```json
-{
-  "feature": "<feature-name>",
-  "tickets": [
-    { "id": "POWR-500", "uuid": "<internal-uuid>", "title": "...", "summary": "...", "priority": 2, "estimate": 3, "labels": ["feature"], "deps": [], "status": "created" }
-  ],
-  "skipped": []
-}
-```
 
 ### 7. Record and advance
 ```bash
@@ -306,19 +274,7 @@ mcp__plugin_linear_linear__list_issues({ project: "<project>", team: "POWR" })
 ```
 Summarize as `project_context`: a compact list of recent/upcoming ticket titles and statuses.
 
-Read the ticket summaries JSON for `impl_steps` per ticket (from the plan):
-```
-Read(".claude/ticket-summaries/<feature>.json")
-```
-
-**Persist execution scope** — write `executeScope` into the ticket summaries JSON so a fresh session can resume:
-```json
-"executeScope": {
-  "type": "project|cycle|tickets",
-  "value": "<project-name or cycle-name or ticket-ids>",
-  "ticketIds": ["POWR-500", "POWR-501", ...]
-}
-```
+The `impl_steps` are included in each ticket's description (added during plan phase) — no separate file or document needed.
 
 ### Resume check (skip completed tickets)
 
@@ -471,7 +427,6 @@ Agent(subagent_type="<chosen-agent>", prompt="
   Estimate: <estimate>
   Review mode: <on|off>
   Fast path: <true|false>
-  Impl steps: <impl_steps from ticket summaries>
 ")
 ```
 
@@ -541,6 +496,8 @@ mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Human Revi
 ```
 
 If review mode: tell user "Changes staged on branch `feat/<ticket-id>-<desc>`."
+
+Tell user: "Test on device. If issues found, use `/powr revise <ticket-id>` with your feedback."
 
 #### 9. Next-ticket message (MANDATORY)
 
@@ -632,7 +589,129 @@ Execution complete.
 Completed: 2/3 | Blocked: 1/3
 ```
 
-Tell user: "All tickets executed. Type `/powr ship` to verify and ship."
+Tell user: "All tickets executed. Use `/powr ship` to verify and ship, or `/powr revise <ticket-id>` if something needs fixing after testing."
+
+---
+
+## /powr revise
+
+Human review found issues with an executed ticket. Re-enters the structured workflow with the user's feedback as the primary new input.
+
+### 1. Collect feedback
+
+The user's message IS the feedback — their text, screenshots, and observations about what's wrong. Do NOT ask them to re-explain. Capture everything they provided as `user_feedback`.
+
+If the user only gave a ticket ID with no feedback, ask once:
+```
+What's wrong with <ticket-id>? Screenshots, error descriptions, or behavioral observations all help.
+```
+
+### 2. Pre-fetch ticket details
+
+```
+mcp__plugin_linear_linear__get_issue({ id: "<ticket-id>", includeRelations: true })
+```
+
+Also get the previous implementation context:
+```bash
+git log --oneline --grep="<ticket-id>" | head -10
+```
+
+### 3. Check revision count
+
+Check how many revision cycles this ticket has been through by counting previous revision comments on the ticket timeline:
+```
+mcp__plugin_linear_linear__list_comments({ issueId: "<uuid>" })
+```
+Count comments containing "Revision #". If this would be revision #3+, warn the user:
+```
+This ticket has been revised <N> times. The approach may need rethinking.
+Consider `/powr plan` to re-plan, or continue with `/powr revise` for another attempt.
+```
+Wait for user confirmation before proceeding.
+
+### 4. Set ticket back to In Progress
+
+```
+mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Progress" })
+```
+
+### 5. Investigate (revision mode)
+
+Always use `powr-investigate` (sonnet) for revisions — understanding what went wrong requires reasoning depth regardless of estimate.
+
+```
+Agent(subagent_type="powr-investigate", prompt="
+  Mode: revision
+  Revision #: <N>
+  Ticket: <ticket-id>
+  UUID: <uuid>
+  Title: <title>
+  Description: <description>
+  Acceptance criteria: <ACs>
+  Labels: <labels>
+  Estimate: <estimate>
+  Project: <project>
+
+  User feedback (THIS IS THE PRIMARY INPUT — what the human found wrong):
+  <user_feedback — include full text and reference any screenshots>
+
+  Previous implementation commits:
+  <git log output for this ticket>
+
+  Focus on: what specifically is broken based on the user's feedback, why the previous implementation didn't work, and what needs to change. Do NOT re-explore the entire codebase — focus on the delta.
+")
+```
+
+```bash
+powr-workmaxxing gate record investigation --ticket <ticket-id> --evidence '{"documented":true,"revision":<N>}'
+```
+
+### 6. Implement (revision mode)
+
+Always use `powr-implement-complex` (inherit) for revisions — fixing existing code with user feedback context is inherently complex.
+
+```
+Agent(subagent_type="powr-implement-complex", prompt="
+  Mode: revision
+  Revision #: <N>
+  Ticket: <ticket-id>
+  UUID: <uuid>
+  Title: <title>
+  Description: <description>
+  Acceptance criteria: <ACs>
+  Review mode: <on|off>
+
+  User feedback:
+  <user_feedback>
+
+  Previous implementation commits:
+  <git log output>
+
+  Build on the existing implementation. Fix what's broken based on the investigation findings. Do NOT rewrite from scratch unless the investigation explicitly calls for it.
+")
+```
+
+```bash
+powr-workmaxxing gate record code_committed --ticket <ticket-id> --evidence '{"commitSha":"<sha>","revision":<N>}'
+```
+
+### 7. Code review + hand off
+
+Follow the same steps as execute (steps 6-8 from "Execute one ticket"):
+- Run tests
+- Code review (use diff-based model routing as normal)
+- Hand off to "In Human Review"
+
+Post a revision comment on the ticket timeline:
+```
+mcp__plugin_linear_linear__save_comment({
+  issueId: "<uuid>",
+  body: "**Revision #<N> complete.** Changes based on human review feedback:\n<1-sentence summary of what was fixed>"
+})
+```
+
+Tell user: "Revision complete. Test again and use `/powr revise <ticket-id>` if more fixes needed, or `/powr ship` when ready."
 
 ---
 
@@ -641,7 +720,10 @@ Tell user: "All tickets executed. Type `/powr ship` to verify and ship."
 ### 1. Read signals and spawn ship verification agent
 
 Determine the agent file for ship verification:
-1. Read the ticket-summaries JSON to count the number of tickets.
+1. Query Linear for the project's tickets to get the count and details:
+   ```
+   mcp__plugin_linear_linear__list_issues({ project: "<project>", team: "POWR" })
+   ```
 2. Check gate status for each ticket:
    ```bash
    powr-workmaxxing gate check-ticket <ticket-id> -w <workflow-id> --json
@@ -656,10 +738,10 @@ Log the decision: "Agent file for ship verification: <agentFile> -- <reason>"
 
 ```
 Agent(subagent_type="<chosen-agent-file>", prompt="
-  Ticket summaries: .claude/ticket-summaries/<name>.json
   Workflow: <workflow-id>
   Repo: $CLAUDE_PROJECT_DIR
   Project: <project>
+  Tickets: <ticket-id-1>, <ticket-id-2>, ...
 ")
 ```
 
@@ -675,7 +757,27 @@ For each ticket currently "In Human Review" or "In Review":
 mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "Done" })
 ```
 
-### 4. Complete
+### 4. Session recap
+
+Before closing out, print a short plain-English summary of what was accomplished. Use the pre-fetched ticket data and the ship-verify agent's output to compile it.
+
+Format:
+
+```
+Session recap:
+- <ticket-id>: <1-sentence description of what was actually done>
+- <ticket-id>: <1-sentence description of what was actually done>
+...
+<total> ticket(s) shipped.
+```
+
+Each line should describe the concrete work — not just the ticket title. For example:
+- "POWR-500: Added Google OAuth provider with token refresh and login UI"
+- "POWR-501: Fixed race condition in session cleanup that caused stale tokens"
+
+Use the ticket title, description, and acceptance criteria from the pre-fetched Linear data to write each line. Keep it to one sentence per ticket.
+
+### 5. Complete
 ```bash
 powr-workmaxxing gate record ship_verified --evidence '{"verified":true}'
 powr-workmaxxing advance  # SHIPPING → IDLE

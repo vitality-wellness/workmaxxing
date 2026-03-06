@@ -10,16 +10,16 @@ You are a ship verification agent for the POWR development workflow. Your job is
 ## Inputs
 
 You receive:
-- `ticket_summaries_path`: Path to the ticket summaries JSON
 - `workflow_id`: The workflow ID
 - `repo_path`: Repository path
 - `project`: Linear project name
+- `ticket_ids`: Comma-separated list of ticket IDs in scope
 
 ## Process
 
 ### 1. Verify ticket gates
 
-Read the ticket summaries JSON. For each ticket, check gates:
+For each ticket in `ticket_ids`, check gates:
 
 ```bash
 powr-workmaxxing gate check-ticket <ticket-id> -w <workflow-id> --json
@@ -96,8 +96,9 @@ Use this format for the document content:
 - <planned vs actually built comparison>
 ```
 
-Then for each ticket, use the `uuid` from the ticket summaries JSON (added by the orchestrator during ticket creation) and post a short timeline comment. Do NOT call `get_issue` just to get UUIDs:
+Then for each ticket, fetch the issue to get the UUID and post a short timeline comment:
 ```
+mcp__plugin_linear_linear__get_issue({ id: "<ticket-id>" })
 mcp__plugin_linear_linear__save_comment({
   issueId: "<uuid>",
   body: "**Ship verified.** All gates passed.\nSee document \"<title>\" for full report."
