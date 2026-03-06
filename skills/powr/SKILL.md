@@ -278,8 +278,13 @@ powr-workmaxxing gate record coderabbit_review --ticket <ticket-id> --evidence '
 ```
 
 #### 8. Hand off
+Try "In Human Review" first. If the status doesn't exist on the team, fall back to "In Review":
 ```
 mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Human Review" })
+```
+If that fails (status not found), use:
+```
+mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Review" })
 ```
 If review mode: tell user "Changes staged on branch `feat/<ticket-id>-<desc>`. Please review, commit, and create a PR."
 
@@ -378,7 +383,7 @@ If blocked tickets exist, report them separately.
 The ship-verify agent posts its ship report directly to Linear as comments on each ticket.
 
 ### 3. Mark tickets Done
-For each ticket currently "In Human Review":
+For each ticket currently "In Human Review" or "In Review":
 ```
 mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "Done" })
 ```

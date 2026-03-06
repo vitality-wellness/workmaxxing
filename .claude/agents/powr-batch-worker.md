@@ -114,7 +114,7 @@ powr-workmaxxing gate record ticket_in_progress -w <workflow_id> --ticket <ticke
 
 ## Done
 
-Set to In Human Review:
+Set to In Human Review (fall back to In Review if that status doesn't exist on the team):
 ```
 mcp__plugin_linear_linear__save_issue({ id: "<ticket_id>", state: "In Human Review" })
 ```

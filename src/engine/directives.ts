@@ -35,11 +35,11 @@ const TICKET_DIRECTIVES: GateDirective[] = [
   {
     gate: "coderabbit_review",
     directive:
-      "Code review complete. Set ticket to 'In Human Review' in Linear:\n" +
+      "Code review complete. Set ticket to 'In Human Review' in Linear (fall back to 'In Review' if that status doesn't exist):\n" +
       "  mcp__plugin_linear_linear__save_issue({ id: \"<ticket-id>\", state: \"In Human Review\" })\n" +
       "The human will review, cross-reference findings, verify ACs, and mark Done during shipping.",
     reviewDirective:
-      "Code review complete. Set ticket to 'In Human Review' in Linear:\n" +
+      "Code review complete. Set ticket to 'In Human Review' in Linear (fall back to 'In Review' if that status doesn't exist):\n" +
       "  mcp__plugin_linear_linear__save_issue({ id: \"<ticket-id>\", state: \"In Human Review\" })\n" +
       "REVIEW MODE: Changes are staged but not committed. The human will review the diff, commit, create a PR, and mark Done.",
   },
