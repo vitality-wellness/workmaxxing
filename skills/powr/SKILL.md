@@ -38,6 +38,53 @@ Spec and plan documents are stored as Linear Documents. Pass document IDs (not c
 - Plan → Linear Document ID from powr-plan
 - `.claude/ticket-summaries/` — compact JSON ticket data (local file)
 
+### Context Exhaustion Handoff
+If context is running low during execution (you sense compression is imminent or you're processing many tickets), you MUST output a structured handoff message to the user BEFORE context runs out. This is critical — without it, the user has no idea where to resume.
+
+**Step 1: Persist execution scope** to `.claude/ticket-summaries/<feature>.json` so a fresh session can reconstruct it:
+```json
+{
+  "feature": "...",
+  "executeScope": {
+    "type": "project|cycle|tickets",
+    "value": "MVP Launch",
+    "ticketIds": ["POWR-500", "POWR-501", "POWR-502"]
+  },
+  "tickets": [...]
+}
+```
+Write this `executeScope` field when execution starts (step: Pre-fetch ticket details). It persists across context resets.
+
+**Step 2: Output the handoff message** to the user:
+```
+---
+EXECUTION PAUSED — context limit reached.
+
+Progress:
+| Ticket   | Status              |
+|----------|---------------------|
+| POWR-500 | Done (all gates)    |
+| POWR-501 | In Review (code review pending) |
+| POWR-502 | Not started         |
+
+Resume command (copy-paste this):
+  /powr execute POWR-501 POWR-502
+
+Or re-run the full scope (completed tickets auto-skip):
+  /powr execute project "MVP Launch"
+
+Workflow: <workflow-id>
+Feature: <feature-name>
+---
+```
+
+The resume command lists only incomplete tickets explicitly by ID so it works without any prior context. The full-scope command also works because the resume check skips completed tickets.
+
+This also applies when:
+- A batch wave completes but more waves remain
+- A single ticket finishes but there are more tickets in scope
+- Any unexpected interruption during execution
+
 ### Dynamic Model Selection (Inline Routing)
 Use the pre-fetched ticket data (estimate, labels, complexity) to choose agent files inline. Do NOT call `powr-workmaxxing model-signals` for investigate or implement routing — the data is already available. Only call `model-signals --diff` for code-review routing (diff stats aren't available until after implementation).
 
@@ -238,6 +285,7 @@ Note the `reviewMode` value for per-ticket workflow.
 | Input | Action |
 |---|---|
 | `/powr execute POWR-500` | Single ticket |
+| `/powr execute POWR-500 POWR-501 POWR-502` | Multiple specific tickets (used for resume) |
 | `/powr execute` | Next unblocked ticket in current workflow |
 | `/powr execute cycle "Sprint 12"` | Batch — all tickets in cycle |
 | `/powr execute project "MVP"` | Batch — all tickets in project |
@@ -261,6 +309,15 @@ Summarize as `project_context`: a compact list of recent/upcoming ticket titles 
 Read the ticket summaries JSON for `impl_steps` per ticket (from the plan):
 ```
 Read(".claude/ticket-summaries/<feature>.json")
+```
+
+**Persist execution scope** — write `executeScope` into the ticket summaries JSON so a fresh session can resume:
+```json
+"executeScope": {
+  "type": "project|cycle|tickets",
+  "value": "<project-name or cycle-name or ticket-ids>",
+  "ticketIds": ["POWR-500", "POWR-501", ...]
+}
 ```
 
 ### Resume check (skip completed tickets)
@@ -485,6 +542,17 @@ mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Human Revi
 
 If review mode: tell user "Changes staged on branch `feat/<ticket-id>-<desc>`."
 
+#### 9. Next-ticket message (MANDATORY)
+
+After handing off each ticket, ALWAYS tell the user what comes next:
+
+- **More tickets remaining in scope:** "Ticket <id> complete (`<N>/<total>`). Moving to <next-ticket-id>: <title>."
+- **Last ticket in current wave (batch mode, more waves):** "Wave <N> complete (`<passed>/<count>` tickets). Starting wave <N+1>: <ticket-ids>."
+- **All tickets done:** Print the execution summary table (below).
+- **Context running low:** Output the Context Exhaustion Handoff (see Global Rules) with explicit resume command BEFORE continuing. Do NOT silently run out of context.
+
+Never silently finish a ticket without stating what happens next.
+
 #### Blocked: Manual Action
 If a ticket requires non-code human action: the agent posts a comment explaining what's needed. Set to "Blocked: Manual Action", move on to next ticket.
 
@@ -536,6 +604,10 @@ powr-workmaxxing repo analyze
 Stop and report if critical issues found.
 
 #### Step 8: Next wave
+Tell user: "Wave <N> complete. <passed>/<total> tickets passed. Starting wave <N+1> with <count> tickets: <ids>."
+
+If context is running low, output the Context Exhaustion Handoff (see Global Rules) before starting the next wave. The resume check will pick up where you left off.
+
 Repeat Steps 4-7 for remaining waves.
 
 After final wave:
