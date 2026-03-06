@@ -32,11 +32,11 @@ Every AskUserQuestion requires a real, non-empty response. If empty/blank: do NO
 ### Linear Status Changes
 Make direct calls for simple status updates (`save_issue` state changes). Subagents post their own findings directly to Linear as comments — no separate writer step needed.
 
-### File-Based Handoffs
-Some subagents write outputs to files. Pass file paths (not content) to the next subagent.
-- `.claude/specs/` — spec documents
-- `.claude/plans/` — implementation plans
-- `.claude/ticket-summaries/` — compact JSON ticket data
+### Handoffs
+Spec and plan documents are stored as Linear Documents. Pass document IDs (not content) to the next subagent.
+- Spec → Linear Document ID from powr-spec
+- Plan → Linear Document ID from powr-plan
+- `.claude/ticket-summaries/` — compact JSON ticket data (local file)
 
 ### Dynamic Model Selection (Agent File Routing)
 Before spawning certain subagents, read ticket signals via `powr-workmaxxing model-signals` and use the decision table below to choose the correct agent file. The model is baked into each agent file's YAML frontmatter — the Claude Code Agent tool does NOT support a runtime `model` parameter. Log each decision so the user sees which agent file was chosen and why.
@@ -76,11 +76,11 @@ Agent(subagent_type="powr-spec", prompt="
   Team: POWR
 ")
 ```
-The agent interviews the user, explores Linear and the codebase, and writes a spec. It returns the spec file path.
+The agent interviews the user, explores Linear and the codebase, and writes a spec as a Linear Document. It returns `SPEC_COMPLETE: <document-id>`.
 
 ### 3. Record and advance
 ```bash
-powr-workmaxxing gate record spec_document_written --evidence '{"path":"<spec-path>"}'
+powr-workmaxxing gate record spec_document_written --evidence '{"documentId":"<document-id>"}'
 powr-workmaxxing advance
 ```
 
@@ -98,22 +98,22 @@ powr-workmaxxing status --repo "$CLAUDE_PROJECT_DIR"
 ### 2. Spawn plan agent
 ```
 Agent(subagent_type="powr-plan", prompt="
-  Spec: <spec-path>
+  Spec document ID: <spec-document-id>
   Repo: $CLAUDE_PROJECT_DIR
   Team: POWR
 ")
 ```
-Returns the plan file path.
+Returns `PLAN_COMPLETE: <document-id>`.
 
 ### 3. Record plan gate
 ```bash
-powr-workmaxxing gate record plan_written --evidence '{"path":"<plan-path>"}'
+powr-workmaxxing gate record plan_written --evidence '{"documentId":"<plan-document-id>"}'
 ```
 
 ### 4. Spawn review agent
 ```
 Agent(subagent_type="powr-review", prompt="
-  Plan: <plan-path>
+  Plan document ID: <plan-document-id>
 ")
 ```
 Returns approval or revision request.
@@ -137,7 +137,7 @@ powr-workmaxxing advance  # REVIEWING → TICKETING
 ### 7. Spawn tickets agent
 ```
 Agent(subagent_type="powr-tickets", prompt="
-  Plan: <plan-path>
+  Plan document ID: <plan-document-id>
   Team: POWR
   Project: <project-name>
 ")
@@ -147,14 +147,6 @@ Returns ticket summaries JSON path and ticket IDs.
 ### 8. Record and advance
 ```bash
 powr-workmaxxing gate record tickets_created --evidence '{"ticketIds":["POWR-500","POWR-501"]}'
-```
-
-Clean up the spec (absorbed into plan and tickets):
-```bash
-rm .claude/specs/<name>.md
-```
-
-```bash
 powr-workmaxxing advance  # TICKETING → EXECUTING
 ```
 
@@ -388,12 +380,7 @@ For each ticket currently "In Human Review" or "In Review":
 mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "Done" })
 ```
 
-### 4. Clean up
-```bash
-rm .claude/plans/<name>.md
-```
-
-### 5. Complete
+### 4. Complete
 ```bash
 powr-workmaxxing gate record ship_verified --evidence '{"verified":true}'
 powr-workmaxxing advance  # SHIPPING → IDLE

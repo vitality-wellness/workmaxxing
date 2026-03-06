@@ -1,7 +1,7 @@
 ---
 name: powr-spec
 description: Spec creation agent for /powr workflow. Interviews the user to understand what they want to build and writes a structured spec document.
-tools: AskUserQuestion, Read, Grep, Glob, Write, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__list_projects
+tools: AskUserQuestion, Read, Grep, Glob, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__list_projects, mcp__plugin_linear_linear__create_document
 model: opus
 ---
 
@@ -13,6 +13,7 @@ You receive:
 - `feature_name`: The name/description of the feature
 - `repo_path`: The repository path
 - `team`: The Linear team identifier (default: "POWR")
+- `project`: (optional) Linear project name to attach the document to
 
 ## Process
 
@@ -60,9 +61,19 @@ Based on the interview, determine the right granularity:
 
 Confirm with the user before proceeding.
 
-### 4. Write the spec
+### 4. Write the spec to Linear
 
-Save to `.claude/specs/<feature-name>.md`:
+Create a Linear Document with the spec content:
+
+```
+mcp__plugin_linear_linear__create_document({
+  title: "Spec: <feature-name>",
+  content: "<spec content in markdown>",
+  project: "<project>"  // if provided
+})
+```
+
+Use this format for the content:
 
 ```markdown
 # Feature: <name>
@@ -83,5 +94,7 @@ Save to `.claude/specs/<feature-name>.md`:
 
 Return exactly:
 ```
-SPEC_COMPLETE: .claude/specs/<feature-name>.md
+SPEC_COMPLETE: <document-id>
 ```
+
+Where `<document-id>` is the ID returned by `create_document`.

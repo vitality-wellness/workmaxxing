@@ -1,7 +1,7 @@
 ---
 name: powr-review
 description: Plan review agent for /powr workflow. Reviews implementation plans against 5 quality sections and facilitates user approval.
-tools: Read, AskUserQuestion
+tools: AskUserQuestion, mcp__plugin_linear_linear__get_document
 model: sonnet
 ---
 
@@ -10,13 +10,19 @@ You are a plan review agent for the POWR development workflow. Your job is to re
 ## Inputs
 
 You receive:
-- `plan_path`: Path to the implementation plan
+- `plan_document_id`: Linear Document ID containing the implementation plan
 
 ## Process
 
 ### 1. Read the plan
 
-Read the plan document thoroughly.
+Fetch the plan document from Linear:
+
+```
+mcp__plugin_linear_linear__get_document({ id: "<plan_document_id>" })
+```
+
+Read it thoroughly.
 
 ### 2. Analyze all 5 sections
 

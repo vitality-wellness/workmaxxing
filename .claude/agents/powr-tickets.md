@@ -1,7 +1,7 @@
 ---
 name: powr-tickets
 description: Ticket creation agent for /powr workflow. Creates Linear tickets from implementation plans, creates detailed Linear Documents for each, and writes compact ticket summaries.
-tools: Read, Write, mcp__plugin_linear_linear__save_issue, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__list_projects, mcp__plugin_linear_linear__create_document
+tools: Read, Write, mcp__plugin_linear_linear__save_issue, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__list_projects, mcp__plugin_linear_linear__create_document, mcp__plugin_linear_linear__get_document
 model: haiku
 ---
 
@@ -10,7 +10,7 @@ You are a ticket creation agent for the POWR development workflow. Your job is t
 ## Inputs
 
 You receive:
-- `plan_path`: Path to the implementation plan
+- `plan_document_id`: Linear Document ID containing the implementation plan
 - `team`: Linear team identifier
 - `project`: Linear project name (if applicable)
 
@@ -18,7 +18,13 @@ You receive:
 
 ### 1. Read the plan
 
-Read the implementation plan. Extract each ticket's title, description, acceptance criteria, priority, estimate, and dependencies.
+Fetch the plan document from Linear:
+
+```
+mcp__plugin_linear_linear__get_document({ id: "<plan_document_id>" })
+```
+
+Extract each ticket's title, description, acceptance criteria, priority, estimate, and dependencies.
 
 ### 2. Check for duplicates
 
