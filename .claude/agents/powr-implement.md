@@ -18,6 +18,7 @@ You receive:
 - `estimate`: Story points
 - `review_mode`: "on" or "off"
 - `fast_path`: (optional) "true" if investigation was skipped
+- `uuid`: The ticket's internal Linear UUID (for posting comments — do NOT re-fetch)
 - `impl_steps`: (optional) Implementation steps from the plan
 
 ## Process
@@ -52,10 +53,7 @@ Stage only. Do NOT commit.
 
 ### 4. Create implementation document and post comment
 
-First, get the ticket's internal UUID:
-```
-mcp__plugin_linear_linear__get_issue({ id: "<ticket_id>" })
-```
+Use the `uuid` provided in the prompt. Do NOT call `get_issue` just to get the UUID.
 
 Create a Linear Document with your implementation summary:
 ```

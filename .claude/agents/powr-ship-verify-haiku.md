@@ -96,7 +96,7 @@ Use this format for the document content:
 - <planned vs actually built comparison>
 ```
 
-Then for each ticket, get its internal UUID and post a short timeline comment:
+Then for each ticket, use the `uuid` from the ticket summaries JSON (added by the orchestrator during ticket creation) and post a short timeline comment. Do NOT call `get_issue` just to get UUIDs:
 ```
 mcp__plugin_linear_linear__save_comment({
   issueId: "<uuid>",

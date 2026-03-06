@@ -13,6 +13,7 @@ You are a batch execution worker for the POWR development workflow. You execute 
 You receive:
 - `workflow_id`: The workflow ID
 - `ticket_id`: The Linear ticket ID
+- `uuid`: The ticket's internal Linear UUID (for posting comments — do NOT re-fetch just for UUID)
 - `ticket_description`: Description of the ticket
 - `acceptance_criteria`: The ticket's ACs
 - `project`: The Linear project name
@@ -32,10 +33,7 @@ powr-workmaxxing gate record ticket_in_progress -w <workflow_id> --ticket <ticke
 
 ## Step 2: Investigate
 
-- Read the full ticket from Linear:
-  ```
-  mcp__plugin_linear_linear__get_issue({ id: "<ticket_id>", includeRelations: true })
-  ```
+- Use the `uuid` provided in the prompt for all comment posting. Only call `get_issue` if you need additional ticket details not provided in the prompt.
 - Fetch project tickets for context:
   ```
   mcp__plugin_linear_linear__list_issues({ project: "<project>", team: "POWR" })

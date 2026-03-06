@@ -16,6 +16,7 @@ You receive:
 - `title`: Ticket title
 - `description`: Full ticket description
 - `acceptance_criteria`: List of ACs
+- `uuid`: The ticket's internal Linear UUID (for posting comments — do NOT re-fetch)
 - `review_mode`: "on" or "off"
 
 ## Process
@@ -50,10 +51,7 @@ Check for:
 
 ### 4. Create review document and post comment
 
-First, get the ticket's internal UUID:
-```
-mcp__plugin_linear_linear__get_issue({ id: "<ticket_id>" })
-```
+Use the `uuid` provided in the prompt. Do NOT call `get_issue` just to get the UUID.
 
 Create a Linear Document with your review:
 ```

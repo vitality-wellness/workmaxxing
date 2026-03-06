@@ -181,7 +181,7 @@ mcp__plugin_linear_linear__create_document({
 {
   "feature": "<feature-name>",
   "tickets": [
-    { "id": "POWR-500", "title": "...", "summary": "...", "priority": 2, "estimate": 3, "labels": ["feature"], "deps": [], "status": "created" }
+    { "id": "POWR-500", "uuid": "<internal-uuid>", "title": "...", "summary": "...", "priority": 2, "estimate": 3, "labels": ["feature"], "deps": [], "status": "created" }
   ],
   "skipped": []
 }
@@ -224,6 +224,8 @@ mcp__plugin_linear_linear__get_issue({ id: "<ticket-id>", includeRelations: true
 ```
 Store for each: `title`, `description`, `acceptance_criteria`, `labels`, `estimate`, `dependencies`, `uuid`.
 
+**IMPORTANT:** The `uuid` (internal Linear ID) must be passed to every subagent prompt so they can post comments without re-fetching the ticket.
+
 Also fetch project context once (shared across all agents):
 ```
 mcp__plugin_linear_linear__list_issues({ project: "<project>", team: "POWR" })
@@ -247,9 +249,24 @@ Log: "Ticket <id>: <fast-path|normal>"
 
 If only one ticket in scope, follow the **Execute one ticket** procedure below, then hand off.
 
-### Multi-ticket execution (pipelined)
+### Multi-ticket execution (auto-route)
 
-When executing 2+ tickets, use pipeline parallelism to overlap code-review with the next ticket's investigation.
+When executing 2+ tickets, choose between **batch worktrees** (parallel) and **pipelined** (sequential) based on dependencies.
+
+**Routing:**
+
+1. Build dependency waves from the pre-fetched ticket data:
+   - Wave 1: tickets with no unresolved blockers among the current batch
+   - Wave 2: tickets depending only on Wave 1 tickets
+   - etc.
+2. **If all tickets fit in a single wave** (no inter-dependencies) → use **Batch: wave-based parallel worktrees** (below). This is the fast path — all tickets execute concurrently.
+3. **If multiple waves exist** (tickets depend on each other) → use **Pipelined execution** (below) for tickets within waves that have only one ticket, and batch worktrees for waves with 2+ tickets.
+
+Log: "Dependency analysis: <N> wave(s). Routing to <batch|pipelined|mixed>."
+
+### Pipelined execution (for dependent tickets)
+
+Use when tickets must execute sequentially due to dependencies.
 
 **Flow:**
 
@@ -314,6 +331,7 @@ Choose agent file per decision table:
 ```
 Agent(subagent_type="<chosen-agent-file>", prompt="
   Ticket: <ticket-id>
+  UUID: <uuid>
   Title: <title>
   Description: <description>
   Acceptance criteria: <ACs>
@@ -341,6 +359,7 @@ powr-workmaxxing model-signals <ticket-id> --repo "$CLAUDE_PROJECT_DIR"
 ```
 Agent(subagent_type="<chosen-agent>", prompt="
   Ticket: <ticket-id>
+  UUID: <uuid>
   Title: <title>
   Description: <description>
   Acceptance criteria: <ACs>
@@ -372,6 +391,7 @@ Choose agent file per decision table:
 ```
 Agent(subagent_type="<chosen-agent-file>", prompt="
   Ticket: <ticket-id>
+  UUID: <uuid>
   Title: <title>
   Description: <description>
   Acceptance criteria: <ACs>
@@ -415,6 +435,7 @@ For each ticket in the wave, spawn a parallel agent in a worktree:
 Agent(subagent_type="powr-batch-worker", prompt="
   Workflow: <workflow-id>
   Ticket: <ticket-id>
+  UUID: <uuid>
   Description: <description>
   Acceptance Criteria: <ACs>
   Project: <project>

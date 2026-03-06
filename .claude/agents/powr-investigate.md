@@ -18,6 +18,7 @@ You receive:
 - `estimate`: Story points
 - `dependencies`: Blocking/blocked tickets
 - `project`: The Linear project name
+- `uuid`: The ticket's internal Linear UUID (for posting comments — do NOT re-fetch)
 - `project_context`: (optional) Summary of related tickets
 
 ## Process
@@ -45,10 +46,7 @@ Answer these 5 questions:
 
 ### 4. Create investigation document and post comment
 
-First, get the ticket's internal UUID:
-```
-mcp__plugin_linear_linear__get_issue({ id: "<ticket_id>" })
-```
+Use the `uuid` provided in the prompt. Do NOT call `get_issue` just to get the UUID.
 
 Create a Linear Document with your findings:
 ```
