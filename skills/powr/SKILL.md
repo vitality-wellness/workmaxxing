@@ -72,6 +72,44 @@ This also applies when:
 - A single ticket finishes but there are more tickets in scope
 - Any unexpected interruption during execution
 
+### Parent Status Propagation
+After every `save_issue` status change on a child ticket, propagate the status to its parent (project, milestone, or parent ticket). This keeps the hierarchy in sync automatically.
+
+**Step 1:** Check if the ticket has a parent:
+```
+mcp__plugin_linear_linear__get_issue({ id: "<ticket-id>", includeRelations: true })
+```
+Look for `parent`, `project`, or `milestone` in the response. If none, skip propagation.
+
+**Step 2:** Get all sibling tickets under the same parent:
+```
+mcp__plugin_linear_linear__list_issues({ project: "<parent-project>", team: "POWR" })
+```
+
+**Step 3:** Apply the propagation rules:
+
+| Sibling statuses | Parent should be |
+|---|---|
+| Any child is In Progress | In Progress |
+| ALL children are In Review or In Human Review (none In Progress) | In Review |
+| ALL children are Done | Done |
+
+Precedence: In Progress > In Review > Done. A single In Progress child keeps the parent In Progress even if others are Done.
+
+**Step 4:** Update the parent only if its status would change:
+```
+mcp__plugin_linear_linear__save_issue({ id: "<parent-id>", state: "<new-state>" })
+```
+
+**When to run:** After these status changes in the workflow:
+- Execute step 2 (ticket → In Progress)
+- Execute step 7 (ticket → In Review)
+- Execute step 8 (ticket → In Human Review)
+- Revise step 4 (ticket → In Progress)
+- Ship step 3 (ticket → Done)
+
+Keep it lightweight — one `list_issues` call per propagation, skip if no parent exists.
+
 ### Dynamic Model Selection (Inline Routing)
 Use the pre-fetched ticket data (estimate, labels, complexity) to choose agent files inline. Do NOT call `powr-workmaxxing model-signals` for investigate or implement routing — the data is already available. Only call `model-signals --diff` for code-review routing (diff stats aren't available until after implementation).
 
@@ -99,22 +137,38 @@ Log each decision so the user sees which agent file was chosen and why.
 
 ## /powr spec
 
-### 1. Start workflow
+### 1. Detect existing ticket
+
+Check if the user's input contains a ticket ID (e.g., `/powr spec POWR-609 ...`). If so:
+
+```
+mcp__plugin_linear_linear__get_issue({ id: "<ticket-id>", includeRelations: true })
+mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Progress" })
+```
+→ Run **Parent Status Propagation** (see Global Rules).
+
+Store the ticket ID and details — pass them to the spec agent so it has context. Use the ticket title as the feature name for the workflow.
+
+If no ticket ID is present, the user is describing a new feature — proceed without status change.
+
+### 2. Start workflow
 ```bash
 powr-workmaxxing start "<feature-name>" --repo "$CLAUDE_PROJECT_DIR"
 ```
 
-### 2. Spawn spec agent
+### 3. Spawn spec agent
 ```
 Agent(subagent_type="powr-spec", prompt="
   Feature: <description from user>
   Repo: $CLAUDE_PROJECT_DIR
   Team: POWR
+  Existing ticket: <ticket-id or 'none'>
+  Ticket details: <title, description, ACs if existing ticket>
 ")
 ```
 The agent interviews the user, explores Linear and the codebase, and writes a spec as a Linear Document. It returns `SPEC_COMPLETE: <document-id>`.
 
-### 3. Record and advance
+### 4. Record and advance
 ```bash
 powr-workmaxxing gate record spec_document_written --evidence '{"documentId":"<document-id>"}'
 powr-workmaxxing advance
@@ -374,6 +428,7 @@ git checkout -b feat/<ticket-id>-<short-description>
 ```
 mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Progress" })
 ```
+→ Run **Parent Status Propagation** (see Global Rules).
 ```bash
 powr-workmaxxing gate record ticket_in_progress --ticket <ticket-id> --evidence '{}'
 ```
@@ -494,6 +549,7 @@ Try "In Human Review" first, fall back to "In Review":
 ```
 mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Human Review" })
 ```
+→ Run **Parent Status Propagation** (see Global Rules).
 
 If review mode: tell user "Changes staged on branch `feat/<ticket-id>-<desc>`."
 
@@ -635,6 +691,7 @@ Wait for user confirmation before proceeding.
 ```
 mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Progress" })
 ```
+→ Run **Parent Status Propagation** (see Global Rules).
 
 ### 5. Investigate (revision mode)
 
@@ -756,6 +813,7 @@ For each ticket currently "In Human Review" or "In Review":
 ```
 mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "Done" })
 ```
+→ Run **Parent Status Propagation** after all tickets are marked Done (once, not per-ticket).
 
 ### 4. Session recap
 
