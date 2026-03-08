@@ -2,7 +2,7 @@
 name: powr
 description: Development workflow engine. Handles the full lifecycle — spec, plan, execute, revise, ship. Use when the user says "/powr" followed by a subcommand (spec, plan, execute, revise, ship) or when they want to start, plan, build, fix, or ship a feature.
 argument-hint: <spec | plan | execute | revise | ship> [args]
-allowed-tools: Bash, Agent, Read, Write, AskUserQuestion, mcp__plugin_linear_linear__save_issue, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__get_document, mcp__plugin_linear_linear__list_projects, mcp__plugin_linear_linear__create_document
+allowed-tools: Bash, Agent, Read, Write, AskUserQuestion, mcp__plugin_linear_linear__save_issue, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__get_document, mcp__plugin_linear_linear__list_projects, mcp__plugin_linear_linear__list_cycles, mcp__plugin_linear_linear__create_document
 ---
 
 # /powr — Orchestrator
@@ -234,6 +234,12 @@ powr-workmaxxing gate record-batch review_architecture,review_code_quality,revie
 
 Parse the `TICKETS_JSON:` block from the plan agent's output. Use parallel API calls where possible.
 
+**Fetch current cycle** (once, before creating any tickets):
+```
+mcp__plugin_linear_linear__list_cycles({ teamId: "POWR", type: "current" })
+```
+Extract the cycle ID or number. Pass it as the `cycle` field on every `save_issue` call below so new tickets land in the active sprint by default.
+
 **a. Parallel duplicate checks:**
 Launch ALL duplicate checks simultaneously:
 ```
@@ -253,7 +259,8 @@ mcp__plugin_linear_linear__save_issue({
   description: "<description from JSON>\n\n## Implementation Steps\n<impl_steps from JSON>",
   priority: <priority>,
   estimate: <estimate>,
-  project: "<project>"
+  project: "<project>",
+  cycle: "<current-cycle-id>"
 })
 ```
 
