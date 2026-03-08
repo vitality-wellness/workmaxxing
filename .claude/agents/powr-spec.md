@@ -14,6 +14,8 @@ You receive:
 - `repo_path`: The repository path
 - `team`: The Linear team identifier (default: "POWR")
 - `project`: (optional) Linear project name to attach the document to
+- `existing_ticket`: (optional) Ticket ID if speccing an existing ticket
+- `ticket_details`: (optional) Title, description, ACs if existing ticket
 
 ## Process
 
@@ -47,6 +49,18 @@ Use AskUserQuestion to have a conversation. Adapt your questions — don't go th
 - **Explore the codebase** to find related code, then share what you found to validate understanding.
 
 Ask follow-ups. Dig into vague answers. If any response comes back empty, re-ask the question in plain text — do NOT proceed without real user input.
+
+**Communication style — this is critical:**
+
+- **Use plain language.** The user may not be deeply technical. Avoid jargon like "UIHostingController", "CGAffineTransform", "composition over inheritance" without explaining what it means in practice. Say what things DO, not what they ARE.
+- **When presenting options or approaches**, always include:
+  - A simple explanation of what each option means in practice
+  - **Pros** and **cons** of each
+  - **What it means for the user** — will it take longer? Is it riskier? Does it affect other features?
+  - A recommendation with reasoning, but let the user decide
+- **When sharing technical findings** from codebase exploration, translate them: "I found that the animation code lives inside the scroll container, which means it gets clipped — think of it like trying to zoom out a photo inside a small frame. The frame stays the same size so you can't see the zoom."
+- **When asking about constraints or trade-offs**, frame them concretely: "Option A is simpler and faster but only fixes the immediate issue. Option B takes longer but prevents the same problem from recurring if the navigation changes again. Which matters more to you?"
+- **Don't assume the user knows** why something is a trade-off. Explain the "why" behind your questions.
 
 ### 3. Determine scope
 
