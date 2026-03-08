@@ -114,4 +114,19 @@ export class TicketWorkflowRepo {
     const done = this.countByStage(workflowId, "DONE");
     return done === total;
   }
+
+  delete(id: string): void {
+    this.db
+      .prepare("DELETE FROM ticket_workflows WHERE id = ?")
+      .run(id);
+  }
+
+  deleteByTicketId(workflowId: string, ticketId: string): boolean {
+    const result = this.db
+      .prepare(
+        "DELETE FROM ticket_workflows WHERE workflow_id = ? AND ticket_id = ?"
+      )
+      .run(workflowId, ticketId);
+    return result.changes > 0;
+  }
 }

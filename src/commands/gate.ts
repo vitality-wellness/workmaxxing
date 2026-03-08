@@ -138,9 +138,15 @@ gateCommand
         if (!ticketWorkflows.allDone(workflow.id)) {
           const total = ticketWorkflows.countTotal(workflow.id);
           const done = ticketWorkflows.countByStage(workflow.id, "DONE");
+          const notDone = allTickets.filter((tw) => tw.stage !== "DONE");
           console.error(
             `Error: Not all tickets are done (${done}/${total} completed). Cannot record all_tickets_done.`
           );
+          console.error(`\nStuck tickets:`);
+          for (const tw of notDone) {
+            console.error(`  ${tw.ticketId.padEnd(12)} stage: ${tw.stage}`);
+          }
+          console.error(`\nTo remove phantom entries: powr-workmaxxing tickets remove <ticket-id>`);
           process.exit(2);
         }
       }
