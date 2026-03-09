@@ -3,6 +3,7 @@ import {
   validateTransition,
   checkGates,
   validateGateEvidence,
+  validateDeferredItems,
   getTransitionChain,
   validateConfig,
 } from "./state-machine.js";
@@ -242,5 +243,70 @@ describe("validateConfig", () => {
   it("returns no errors for current config", () => {
     const errors = validateConfig();
     expect(errors).toEqual([]);
+  });
+});
+
+describe("validateDeferredItems", () => {
+  it("accepts zero items with zero tickets", () => {
+    expect(validateDeferredItems(0, []).valid).toBe(true);
+  });
+
+  it("accepts matching count of items and tickets", () => {
+    expect(validateDeferredItems(2, ["POWR-100", "POWR-101"]).valid).toBe(true);
+  });
+
+  it("accepts single item with single ticket", () => {
+    expect(validateDeferredItems(1, ["POWR-100"]).valid).toBe(true);
+  });
+
+  it("rejects deferred items with no tickets", () => {
+    const result = validateDeferredItems(3, []);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("3 deferred item(s)");
+    expect(result.error).toContain("no deferred tickets");
+  });
+
+  it("rejects mismatched count — fewer tickets than items", () => {
+    const result = validateDeferredItems(3, ["POWR-100"]);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("deferredItems count (3)");
+    expect(result.error).toContain("deferredTickets length (1)");
+  });
+
+  it("rejects mismatched count — more tickets than items", () => {
+    const result = validateDeferredItems(1, ["POWR-100", "POWR-101"]);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("deferredItems count (1)");
+    expect(result.error).toContain("deferredTickets length (2)");
+  });
+
+  it("rejects placeholder ticket IDs (POWR-XXX)", () => {
+    const result = validateDeferredItems(1, ["POWR-XXX"]);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("placeholder");
+  });
+
+  it("rejects placeholder ticket IDs (PROJ-Xxx)", () => {
+    const result = validateDeferredItems(1, ["PROJ-Xxx"]);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("placeholder");
+  });
+
+  it("rejects empty string ticket IDs", () => {
+    const result = validateDeferredItems(1, [""]);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("placeholder or empty");
+  });
+
+  it("rejects whitespace-only ticket IDs", () => {
+    const result = validateDeferredItems(1, ["  "]);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("placeholder or empty");
+  });
+
+  it("catches one bad ID among valid ones", () => {
+    const result = validateDeferredItems(3, ["POWR-100", "POWR-XXX", "POWR-102"]);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("POWR-XXX");
   });
 });

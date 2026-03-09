@@ -1,7 +1,7 @@
 ---
 name: powr-code-review
 description: Code review agent for /powr workflow. Reviews code changes for a ticket and writes a structured review report.
-tools: Read, Bash, Grep, Glob, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__create_document, mcp__plugin_linear_linear__save_comment
+tools: Read, Bash, Grep, Glob, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__create_document, mcp__plugin_linear_linear__save_comment
 skills:
   - coderabbit:code-review
 model: sonnet
@@ -81,11 +81,13 @@ Use this format for the document content:
 
 ## Deferred Items
 
-Items that don't block this ticket but should become backlog tickets. For each, provide enough detail to create a ticket:
+Items that don't block this ticket but need follow-up. **Every deferred item MUST get a ticket** — the orchestrator will create one from your DEFERRED_JSON output. Only defer items that are genuinely out of scope for this ticket. If an item is quick to fix (< 5 min), fix it now instead of deferring.
 
-| Item | File(s) | Description |
-|------|---------|-------------|
-| <short title> | <file:line references> | <what needs to change and why> |
+Before adding a deferred item, search Linear (`list_issues`) for an existing ticket covering the same issue. If one exists, reference it by ID instead of creating a duplicate — and set `existing_ticket` in the JSON output.
+
+| Item | File(s) | Description | Existing ticket? |
+|------|---------|-------------|-----------------|
+| <short title> | <file:line references> | <what needs to change and why> | <ticket ID or "New"> |
 
 (or "None")
 ```
@@ -115,11 +117,12 @@ The `DEFERRED_JSON` line is a JSON array. Each element has:
 - `files`: array of `file:line` references
 - `estimate`: story points (1-3)
 - `labels`: array of labels (e.g. `["Improvement"]` or `["Bug"]`)
+- `existing_ticket`: existing Linear ticket ID if one already covers this issue (e.g. `"POWR-123"`), or `null` if a new ticket should be created
 
 If there are no deferred items: `DEFERRED_JSON: []`
 
 Example:
 ```
 Deferred items: 1
-DEFERRED_JSON: [{"title":"Replace 0.15s delay with deterministic callback","description":"The onCameraRetryRequested uses a hardcoded 0.15s delay before reopening the camera. Should use the onFlowCompleted callback instead for deterministic timing.","files":["AppRootView.swift:45"],"estimate":1,"labels":["Improvement"]}]
+DEFERRED_JSON: [{"title":"Replace 0.15s delay with deterministic callback","description":"The onCameraRetryRequested uses a hardcoded 0.15s delay before reopening the camera. Should use the onFlowCompleted callback instead for deterministic timing.","files":["AppRootView.swift:45"],"estimate":1,"labels":["Improvement"],"existing_ticket":null}]
 ```

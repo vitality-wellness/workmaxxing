@@ -64,6 +64,58 @@ const GATE_EVIDENCE_SCHEMAS: Record<string, z.ZodType> = {
     .passthrough(),
 };
 
+// --- Deferred items validation ---
+
+export interface DeferredItemValidation {
+  valid: boolean;
+  error?: string;
+}
+
+/**
+ * Mechanically enforce that every deferred item from a code review has a ticket.
+ * - deferredItems count must match deferredTickets length (1:1 mapping)
+ * - No placeholder or empty ticket IDs allowed
+ * - Zero deferred items with zero tickets is valid (skip path)
+ */
+export function validateDeferredItems(
+  deferredItems: number,
+  deferredTickets: string[]
+): DeferredItemValidation {
+  if (deferredItems === 0 && deferredTickets.length === 0) {
+    return { valid: true };
+  }
+
+  if (deferredItems > 0 && deferredTickets.length === 0) {
+    return {
+      valid: false,
+      error: `Code review found ${deferredItems} deferred item(s) but no deferred tickets provided. ` +
+        `Create follow-up tickets for each deferred item, then pass their IDs in deferredTickets.`,
+    };
+  }
+
+  if (deferredTickets.length !== deferredItems) {
+    return {
+      valid: false,
+      error: `deferredItems count (${deferredItems}) does not match deferredTickets length (${deferredTickets.length}). ` +
+        `Every deferred item must have exactly one ticket — either newly created or pre-existing.`,
+    };
+  }
+
+  const placeholderPattern = /^[A-Z]+-[Xx]+$/;
+  const badTickets = deferredTickets.filter(
+    (id) => !id || id.trim() === "" || placeholderPattern.test(id)
+  );
+  if (badTickets.length > 0) {
+    return {
+      valid: false,
+      error: `deferredTickets contains placeholder or empty IDs: ${JSON.stringify(badTickets)}. ` +
+        `Every deferred item must have a real ticket ID.`,
+    };
+  }
+
+  return { valid: true };
+}
+
 export interface TransitionResult {
   valid: boolean;
   from: string;

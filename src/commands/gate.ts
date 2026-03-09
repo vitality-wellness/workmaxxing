@@ -6,7 +6,7 @@ import { GateRepo } from "../store/gate-repo.js";
 import { AuditRepo } from "../store/audit-repo.js";
 import { TicketWorkflowRepo } from "../store/ticket-workflow-repo.js";
 import { getWorkflowConfig, getTicketStageOrder, deriveGateNextStage, getTicketGateNames } from "../engine/workflow-config.js";
-import { validateGateEvidence, GATE_EVIDENCE_EXAMPLES } from "../engine/state-machine.js";
+import { validateGateEvidence, validateDeferredItems, GATE_EVIDENCE_EXAMPLES } from "../engine/state-machine.js";
 import { resolveWorkflow, requireWorkflow } from "../resolve-workflow.js";
 import { detectGatesFromComment } from "../engine/gate-detection.js";
 import { getNextDirective, getDirectiveForGate } from "../engine/directives.js";
@@ -103,10 +103,11 @@ gateCommand
       if (name === "coderabbit_review") {
         const deferredItems = evidence.deferredItems as number;
         const deferredTickets = (evidence.deferredTickets as string[]) ?? [];
-        if (deferredItems > 0 && deferredTickets.length === 0) {
+
+        const deferredValidation = validateDeferredItems(deferredItems, deferredTickets);
+        if (!deferredValidation.valid) {
           console.error(
-            `Error: Code review found ${deferredItems} deferred item(s) but no deferred tickets provided. ` +
-              `Create follow-up tickets for each deferred item, then pass their IDs in deferredTickets. ` +
+            `Error: ${deferredValidation.error} ` +
               `Expected format: ${GATE_EVIDENCE_EXAMPLES.coderabbit_review}`
           );
           process.exit(2);

@@ -590,8 +590,11 @@ Parse the `DEFERRED_JSON` line from the code review output. If `Deferred items: 
 
 If deferred items > 0, create follow-up tickets **before** recording the gate (the CLI enforces this — `gate record coderabbit_review` will reject evidence with `deferredItems > 0` and empty `deferredTickets`):
 
+For each item in `DEFERRED_JSON`:
+- If `existing_ticket` is set (e.g. `"POWR-123"`): use that ID directly — do NOT create a duplicate ticket.
+- If `existing_ticket` is `null`: create a new ticket:
+
 ```
-# For each item in DEFERRED_JSON, create a ticket:
 mcp__plugin_linear_linear__save_issue({
   title: "<title from JSON>",
   team: "POWR",
@@ -603,16 +606,19 @@ mcp__plugin_linear_linear__save_issue({
 })
 ```
 
-Create tickets in parallel where possible. Collect the created ticket IDs.
+Create tickets in parallel where possible. Collect all ticket IDs (both existing and newly created).
 
-Log: "Created <N> deferred ticket(s): <ids>. Code review suggestions are now tracked."
+Log: "Deferred <N> item(s): <ids> (<M> new, <K> existing). All tracked."
 
 **Record gate with full evidence:**
 ```bash
 powr-workmaxxing gate record coderabbit_review --ticket <ticket-id> --evidence '{"verdict":"<verdict>","criticalIssues":<count>,"deferredItems":<count>,"deferredTickets":["POWR-XXX"]}'
 ```
 
-The gate will be **rejected** if `deferredItems > 0` and `deferredTickets` is empty. This is mechanical enforcement — you cannot skip creating the follow-up tickets.
+The gate **mechanically enforces** a 1:1 mapping — it will reject if:
+- `deferredItems > 0` and `deferredTickets` is empty
+- `deferredItems` count does not match `deferredTickets` length
+- Any ticket ID in `deferredTickets` is a placeholder (e.g., `POWR-XXX`) or empty
 
 #### 8. Hand off
 Try "In Human Review" first, fall back to "In Review":
