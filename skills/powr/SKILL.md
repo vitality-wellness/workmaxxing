@@ -309,6 +309,36 @@ powr-workmaxxing repo info --repo "$CLAUDE_PROJECT_DIR" --json
 ```
 Note the `reviewMode` value for per-ticket workflow.
 
+### Ensure workflow exists
+```bash
+powr-workmaxxing status --repo "$CLAUDE_PROJECT_DIR" 2>&1
+```
+- **Active workflow in EXECUTING state** → use its workflow ID. Done.
+- **Active workflow in another state** (SPECCING, PLANNING, etc.) → that workflow is mid-ceremony. Do NOT hijack it. Create a new one (see below).
+- **No active workflow, or workflow in IDLE** → need a new workflow.
+
+**Creating a workflow for direct execution:**
+
+When the user provides specific ticket IDs (not coming from a `/powr plan` flow), use `start-execute` to create a workflow directly at EXECUTING:
+```bash
+powr-workmaxxing start-execute "<batch-name>" --repo "$CLAUDE_PROJECT_DIR" --tickets "<POWR-X>,<POWR-Y>"
+```
+This skips spec/plan gates (the tickets already exist) but the per-ticket gates (investigate → implement → test → review) are fully enforced. The audit trail records this as a `workflow_started_direct_execute`.
+
+**Ticket readiness check (before launching):**
+
+After pre-fetching ticket details, validate that each ticket meets the minimum bar for direct execution:
+- Has a `description` (not empty)
+- Has an `estimate` (not null)
+
+If any ticket fails the check, warn the user:
+```
+Ticket <id> is missing <description|estimate>. Consider `/powr spec` + `/powr plan` first, or add the missing fields in Linear and retry.
+```
+Do NOT block — the user can choose to proceed. But surface the gap.
+
+**NEVER** call `powr-workmaxxing start` followed by `advance` to reach EXECUTING — the gates will block you.
+
 ### Resolve scope
 
 | Input | Action |
@@ -613,7 +643,7 @@ Get all tickets for cycle/project via Linear MCP. Call `get_issue` with `include
 - etc.
 
 #### Step 3: Present wave plan
-Show user the wave breakdown. Wait for approval before launching.
+Show user the wave breakdown. **Only wait for approval if scope was discovered** (project/cycle query). If the user explicitly listed ticket IDs in their execute command, they already approved — log the plan and launch immediately.
 
 #### Step 4: Launch wave
 For each ticket in the wave, spawn a parallel agent in a worktree:
@@ -639,9 +669,16 @@ powr-workmaxxing gate check-ticket <ticket-id> -w <workflow-id> --json
 - Do NOT merge until user decides on failures
 
 #### Step 6: Merge worktrees
+For each completed worktree:
 ```bash
 cd <worktree> && git rebase main && cd <main-repo> && git merge --ff-only <branch>
 ```
+Then clean up the worktree and its branch:
+```bash
+git worktree remove <worktree-path> 2>/dev/null
+git branch -D <branch-name> 2>/dev/null
+```
+Claude Code creates `worktree-agent-*` branches that persist after merge. Always delete them — they accumulate fast across batch runs.
 
 #### Step 7: Static analysis
 ```bash
@@ -664,7 +701,19 @@ powr-workmaxxing advance
 
 ### Execution summary
 
-After ALL tickets complete (single, pipelined, or batch), print a summary table:
+After ALL tickets complete (single, pipelined, or batch), build the summary from gate data — NOT from orchestrator memory. This ensures every ticket in scope appears even if the orchestrator lost context during a long batch.
+
+**Step 1:** Re-check every ticket in the original scope:
+```bash
+powr-workmaxxing gate check-ticket <ticket-id> -w <workflow-id> --json
+```
+
+**Step 2:** For each ticket, also fetch current Linear status:
+```
+mcp__plugin_linear_linear__get_issue({ id: "<ticket-id>" })
+```
+
+**Step 3:** Print the summary table from these fresh results:
 
 ```
 Execution complete.

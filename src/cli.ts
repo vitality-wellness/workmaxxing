@@ -3,6 +3,7 @@
 import { Command } from "commander";
 import { statusCommand } from "./commands/status.js";
 import { startCommand } from "./commands/start.js";
+import { startExecuteCommand } from "./commands/start-execute.js";
 import { advanceCommand } from "./commands/advance.js";
 import { gateCommand } from "./commands/gate.js";
 import { sessionCommand } from "./commands/session.js";
@@ -26,6 +27,7 @@ program
 // Workflow lifecycle
 program.addCommand(statusCommand);
 program.addCommand(startCommand);
+program.addCommand(startExecuteCommand);
 program.addCommand(advanceCommand);
 program.addCommand(bypassCommand);
 
