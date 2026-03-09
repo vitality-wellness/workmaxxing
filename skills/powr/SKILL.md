@@ -437,7 +437,7 @@ mcp__plugin_linear_linear__save_issue({ id: "<ticket-id>", state: "In Progress" 
 ```
 → Run **Parent Status Propagation** (see Global Rules).
 ```bash
-powr-workmaxxing gate record ticket_in_progress --ticket <ticket-id> --evidence '{}'
+powr-workmaxxing gate record ticket_in_progress --ticket <ticket-id> --evidence '{"linearIssueId":"<ticket-id>"}'
 ```
 
 #### 3. Investigate (skip if fast-path)
