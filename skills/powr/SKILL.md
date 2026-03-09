@@ -235,10 +235,16 @@ powr-workmaxxing gate record-batch review_architecture,review_code_quality,revie
 Parse the `TICKETS_JSON:` block from the plan agent's output. Use parallel API calls where possible.
 
 **Fetch current cycle** (once, before creating any tickets):
+
+First get the team UUID (the `list_cycles` API requires the UUID, NOT the team key like "POWR" or "ACT"):
 ```
-mcp__plugin_linear_linear__list_cycles({ teamId: "POWR", type: "current" })
+mcp__plugin_linear_linear__get_team({ teamId: "<team-key>" })
 ```
-Extract the cycle ID or number. Pass it as the `cycle` field on every `save_issue` call below so new tickets land in the active sprint by default.
+Then use the UUID from the response:
+```
+mcp__plugin_linear_linear__list_cycles({ teamId: "<team-uuid-from-get_team>", type: "current" })
+```
+Extract the cycle ID. Pass it as the `cycle` field on every `save_issue` call below so new tickets land in the active sprint by default.
 
 **a. Parallel duplicate checks:**
 Launch ALL duplicate checks simultaneously:
