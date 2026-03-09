@@ -464,6 +464,8 @@ You ←→ Claude Code
 
 No local file artifacts. Linear is the single source of truth for all ticket data — specs, plans, implementation steps, investigation findings, review reports. The CLI database tracks workflow state and gates. Content stays in subagent contexts — only ticket IDs and brief summaries flow through the orchestrator.
 
+The orchestrator's `allowed-tools` deliberately excludes Write and Edit — it can read files, run CLI commands, call Linear, and spawn agents, but it physically cannot write code. This forces delegation: if the orchestrator needs code written, it must spawn an implement agent. Without this restriction, the model will sometimes skip delegation and implement inline, loading implementation context into the orchestrator and bypassing the agent's specific instructions for commits, comments, and error handling.
+
 ### Dynamic model selection
 
 Not every task in the workflow needs the same reasoning depth. Speccing a feature requires nuance. Replacing `foregroundColor` with `foregroundStyle` across 90 files does not. The orchestrator matches model capability to task complexity — using the strongest models where judgment matters and cheaper models where the work is mechanical.
