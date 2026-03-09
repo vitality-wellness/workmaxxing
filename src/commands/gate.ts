@@ -402,7 +402,7 @@ gateCommand
 
 gateCommand
   .command("check-ticket")
-  .description("Check all 7 ticket gates at once for a specific ticket")
+  .description("Check all 5 ticket gates at once for a specific ticket")
   .argument("<ticket-id>", "Ticket ID (e.g., POWR-500)")
   .option("--repo <path>", "Repository path", process.cwd())
   .option("-w, --workflow <id>", "Workflow ID (or set POWR_WF env var)")
@@ -582,8 +582,7 @@ gateCommand
 
     // Determine level based on stage
     const isTicketLevel = [
-      "INVESTIGATING", "IMPLEMENTING", "CODE_REVIEWING",
-      "CROSS_REFING", "FIXING", "VERIFYING_ACS",
+      "INVESTIGATING", "IMPLEMENTING", "TESTING", "CODE_REVIEWING",
     ].includes(workflow.stage);
 
     const directive = getNextDirective(

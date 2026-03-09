@@ -53,7 +53,7 @@ Say the word, Claude handles the rest.
 
 AI coding agents are fast but sloppy. Left unchecked, Claude will skip investigation, write code without understanding context, commit without review, and mark tickets done with half the acceptance criteria unverified. Telling it "please be thorough" in a system prompt doesn't work — it agrees, then cuts corners anyway. And you shouldn't have to paste the same 20-line prompt every session reminding it to investigate before coding, run code review after committing, and cross-reference findings with existing tickets.
 
-workmaxxing fixes this with **gates** — hard checkpoints that mechanically block progress until real work is done. Not instructions. Not suggestions. Actual PreToolUse hooks that deny tool calls if gates aren't passed. Claude can't mark a ticket Done without passing all 4 gates. It can't edit production code without investigating first. It can't skip code review. The enforcement lives in hooks and SQLite, not in prose.
+workmaxxing fixes this with **gates** — hard checkpoints that mechanically block progress until real work is done. Not instructions. Not suggestions. Actual PreToolUse hooks that deny tool calls if gates aren't passed. Claude can't mark a ticket Done without passing all 5 gates. It can't edit production code without investigating first. It can't skip code review. The enforcement lives in hooks and SQLite, not in prose.
 
 ## Why Linear
 
@@ -179,7 +179,9 @@ You:    /powr execute cycle "Sprint 12"        ← all tickets in a cycle
 You:    /powr execute project "MVP Launch"     ← all tickets in a project
 ```
 
-**Single ticket:** Claude sets the ticket to In Progress, investigates the codebase, implements, runs the test suite, then runs CodeRabbit review. Five quality gates per ticket — it can't skip any of them. If tests fail, Claude fixes the code and re-runs before review starts. Tickets stay in "In Human Review" until you ship.
+**Single ticket:** Claude sets the ticket to In Progress, investigates the codebase, implements, runs the test suite, then runs CodeRabbit review. Five quality gates per ticket — all enforced. If tests fail, Claude fixes the code and re-runs before review starts. Tickets stay in "In Human Review" until you ship.
+
+**Fast-path:** Tickets with `estimate <= 1` AND a `bug-fix` label skip investigation (the gate is recorded with `fastPath: true`). Everything else — implementation, tests, code review — still applies.
 
 **Direct execution:** Tickets don't have to come from `/powr plan`. If you created tickets manually in Linear (from an audit, a bug report, etc.), just pass them directly: `/powr execute POWR-791 POWR-792`. Claude validates each ticket has a description and estimate, then executes. The spec/plan ceremony is skipped but all per-ticket quality gates still apply.
 
@@ -216,7 +218,7 @@ This is the human part. Run the app, test the feature, verify it works as expect
 You:    /powr revise POWR-500 the scale animation isn't visible, the page stays full size
 ```
 
-When human testing finds issues, `/powr revise` re-enters the structured workflow with your feedback. You provide what's wrong — text, screenshots, behavioral observations — and Claude runs the full cycle again: re-investigate (focused on what broke), implement a fix (building on existing code, not starting over), test, code review, hand off.
+When human testing finds issues, `/powr revise` re-enters the structured workflow with your feedback. You provide what's wrong — text, screenshots, behavioral observations — and Claude runs the full cycle again: re-investigate (focused on what broke), implement a fix (building on existing code, not starting over), test, code review, hand off. Revisions always use higher-capability agents (sonnet for investigation, inherit for implementation) regardless of ticket estimate, because understanding what went wrong requires reasoning depth.
 
 It tracks revision count on the ticket timeline. If you're on revision #3+, Claude flags that the approach may need rethinking and suggests re-planning instead of another patch.
 
@@ -228,7 +230,7 @@ The loop is: execute → test → revise → test → revise → ... → ship. E
 You:    /powr ship
 ```
 
-Claude verifies **every ticket passed through all 4 gates** — ticket in progress, investigation, code committed, code review. Tickets should be in "In Human Review" status. If any ticket skipped a gate, it stops and tells you what's missing. Nothing ships until everything checks out.
+Claude verifies **every ticket passed through all 5 gates** — ticket in progress, investigation, code committed, tests passed, code review. Tickets should be in "In Human Review" status. If any ticket skipped a gate, it stops and tells you what's missing. Nothing ships until everything checks out.
 
 Then it audits the ticket landscape — orphaned tickets, in-progress work that should have been completed, planned vs actually built. It runs static analysis and verifies everything is committed.
 
@@ -332,7 +334,15 @@ IN PROGRESS → INVESTIGATE → IMPLEMENT → TEST → CODE REVIEW → "In Human
 
 When code review starts, Claude sets the ticket to **"In Review"**. After review completes, it moves to **"In Human Review"** — signaling it's waiting on a person. Marking Done happens during the ship phase.
 
-Gates are **ticket-scoped** — ticket A's gates don't satisfy ticket B's Done check. Evidence is validated: spec/plan gates require real file paths, `code_committed` requires a valid commit SHA, `all_tickets_done` checks that every ticket_workflow is in DONE.
+Gates are **ticket-scoped** — ticket A's gates don't satisfy ticket B's Done check. Evidence is Zod-validated: `ticket_in_progress` requires `{"linearIssueId": "POWR-XXX"}`, `code_committed` requires a valid commit SHA, `all_tickets_done` checks that every ticket_workflow is in DONE.
+
+### Deferred items
+
+Code review may identify issues that aren't worth fixing in the current ticket — style improvements, minor refactors, non-blocking suggestions. Instead of ignoring them, the orchestrator creates follow-up tickets automatically and records their IDs as evidence on the code review gate. The gate mechanically rejects evidence with deferred items but no corresponding tickets — you can't defer work into the void.
+
+### Parent status propagation
+
+When a child ticket's status changes (In Progress, In Review, In Human Review, Done), the orchestrator propagates to the parent project or milestone: any child In Progress keeps the parent In Progress; all children In Review moves the parent to In Review; all children Done marks the parent Done.
 
 ### Code review fallback
 
@@ -404,8 +414,9 @@ Batches run in dependency waves:
 2. Group independent tickets into waves
 3. Launch each wave as parallel worktree agents
 4. Merge worktrees into main between waves (rebase + fast-forward)
-5. Run static analysis after merge
-6. Next wave
+5. Clean up worktree directories and `worktree-agent-*` branches
+6. Run static analysis after merge
+7. Next wave
 
 Merge hook blocks `git merge worktree-*` if branch diverged — must rebase first.
 
@@ -431,7 +442,7 @@ Workflows untouched for 2+ hours get a soft warning instead of blocking.
 
 ```
 You ←→ Claude Code
-         ├── /powr skill — lightweight orchestrator (~300 lines, routing only)
+         ├── /powr skill — orchestrator (~900 lines, routing + coordination)
          │     ├── Spawns specialized subagents via Agent tool
          │     ├── Bash(powr-workmaxxing <cmd>)  — state machine
          │     └── Linear MCP                    — tickets (single source of truth)
@@ -439,12 +450,15 @@ You ←→ Claude Code
          │     ├── powr-spec (opus)              — user interview + spec writing
          │     ├── powr-plan (opus)              — codebase exploration + planning
          │     ├── powr-investigate (sonnet)     — ticket investigation
+         │     │   └── powr-investigate-haiku    — lightweight variant (est ≤ 1 or bug-fix)
          │     ├── powr-implement (sonnet)       — code implementation (simple)
          │     ├── powr-implement-complex (inherit) — code implementation (moderate/complex)
          │     ├── powr-code-review (sonnet)     — review code changes
+         │     │   └── powr-code-review-haiku    — lightweight variant (< 50 lines, 1 file)
          │     ├── powr-ship-verify (sonnet)     — ship verification
+         │     │   └── powr-ship-verify-haiku    — lightweight variant (1-2 tickets, all green)
          │     └── powr-batch-worker (inherit)   — full ticket in isolated worktree
-         └── Hooks (powr-hook.sh, 12 handlers)
+         └── Hooks (powr-hook.sh, 13 handlers)
                └── sqlite3 ~/.powr/workflow.db   — <50ms queries
 ```
 
@@ -546,6 +560,8 @@ powr-workmaxxing
 
   tickets preview <plan.md> [--json]  Preview tickets from plan
   tickets validate --json '{...}'     Validate ticket fields
+  tickets list [-w <id>] [--json]    List tracked ticket workflows
+  tickets remove <ticket-id> [-w <id>]  Remove stale/phantom ticket tracking
 
   repo analyze                        Run static analysis
   repo test                           Run test suite
