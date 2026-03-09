@@ -2,7 +2,7 @@
 name: powr
 description: Development workflow engine. Handles the full lifecycle — spec, plan, execute, revise, ship. Use when the user says "/powr" followed by a subcommand (spec, plan, execute, revise, ship) or when they want to start, plan, build, fix, or ship a feature.
 argument-hint: <spec | plan | execute | revise | ship> [args]
-allowed-tools: Bash, Agent, Read, Write, AskUserQuestion, mcp__plugin_linear_linear__save_issue, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__get_document, mcp__plugin_linear_linear__list_projects, mcp__plugin_linear_linear__list_cycles, mcp__plugin_linear_linear__create_document
+allowed-tools: Bash, Agent, Read, AskUserQuestion, mcp__plugin_linear_linear__save_issue, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__get_document, mcp__plugin_linear_linear__list_projects, mcp__plugin_linear_linear__list_cycles, mcp__plugin_linear_linear__create_document, mcp__plugin_linear_linear__save_comment, mcp__plugin_linear_linear__list_comments
 ---
 
 # /powr — Orchestrator
@@ -508,8 +508,6 @@ Use the `Complexity` value from the investigate agent's output:
 - **Fast-path** tickets → `powr-implement` (simple by definition)
 
 #### 5. Implement
-
-**IMPORTANT: Always spawn an agent for implementation. NEVER implement code inline in the orchestrator.** The orchestrator's job is routing and coordination — it must not read source files, write code, or run tests itself. Implementation belongs in the subagent where it has isolated context and follows the agent's specific instructions for commits, comments, and error handling.
 
 ```
 Agent(subagent_type="<chosen-agent>", prompt="
