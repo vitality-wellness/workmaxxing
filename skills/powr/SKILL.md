@@ -508,6 +508,9 @@ Use the `Complexity` value from the investigate agent's output:
 - **Fast-path** tickets → `powr-implement` (simple by definition)
 
 #### 5. Implement
+
+**IMPORTANT: Always spawn an agent for implementation. NEVER implement code inline in the orchestrator.** The orchestrator's job is routing and coordination — it must not read source files, write code, or run tests itself. Implementation belongs in the subagent where it has isolated context and follows the agent's specific instructions for commits, comments, and error handling.
+
 ```
 Agent(subagent_type="<chosen-agent>", prompt="
   Ticket: <ticket-id>
@@ -695,7 +698,7 @@ Repeat Steps 4-7 for remaining waves.
 
 After final wave:
 ```bash
-powr-workmaxxing gate record all_tickets_done --evidence '{}'
+powr-workmaxxing gate record all_tickets_done --evidence '{"ticketCount": <number-of-tickets-executed>}'
 powr-workmaxxing advance
 ```
 
