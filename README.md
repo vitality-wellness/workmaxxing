@@ -466,15 +466,71 @@ No local file artifacts. Linear is the single source of truth for all ticket dat
 
 ### Dynamic model selection
 
-The orchestrator routes tasks to cheaper models when the work doesn't need top-tier reasoning. For investigate and implement routing, the orchestrator uses pre-fetched ticket data directly (no CLI call). Only code-review routing calls `model-signals --diff` since diff stats require post-implementation data:
+Not every task in the workflow needs the same reasoning depth. Speccing a feature requires nuance. Replacing `foregroundColor` with `foregroundStyle` across 90 files does not. The orchestrator matches model capability to task complexity — using the strongest models where judgment matters and cheaper models where the work is mechanical.
 
-| Agent | Haiku variant | When |
+#### Three model tiers
+
+| Tier | Model | Cost | When it's used |
+|---|---|---|---|
+| **Opus** | claude-opus | Highest | Tasks requiring deep understanding — user interviews, architectural planning |
+| **Sonnet** | claude-sonnet | Mid | Tasks requiring solid reasoning — investigation, implementation, code review |
+| **Haiku** | claude-haiku | Lowest | Tasks that are mechanical or confirmatory — small investigations, trivial reviews |
+| **Inherit** | User's model | Varies | Tasks where the user's own model choice should apply — complex implementation, batch workers |
+
+Each agent has a `model:` field in its frontmatter that pins it to a tier. The orchestrator doesn't pick models — it picks agent files, and the model comes with it.
+
+#### Fixed assignments
+
+Some agents always run at the same tier because their task inherently requires it:
+
+| Agent | Model | Why |
 |---|---|---|
-| `powr-investigate` | `powr-investigate-haiku` | estimate <= 1 or "bug-fix" label |
-| `powr-code-review` | `powr-code-review-haiku` | diff < 50 lines, single file |
-| `powr-ship-verify` | `powr-ship-verify-haiku` | 1-2 tickets, all gates passed |
+| `powr-spec` | opus | Interviewing humans and synthesizing scope requires nuance. Cheaper models miss subtlety, ask worse questions, and produce specs that cause rework downstream. |
+| `powr-plan` | opus | Architectural reasoning across a full codebase. The plan determines everything downstream — a bad plan wastes more money than the model costs. |
+| `powr-implement` | sonnet | Writing code for Simple-complexity tickets. Reliable enough for straightforward implementations. |
+| `powr-implement-complex` | inherit | Moderate/Complex tickets. Uses whatever model the user chose — if they're running Opus, complex work gets Opus. Respects the user's cost/quality tradeoff. |
+| `powr-batch-worker` | inherit | Self-contained ticket execution in a worktree. Same reasoning as implement-complex — the user's model choice applies. |
 
-Implementation routing uses separate agents: `powr-implement` (sonnet) for Simple complexity, `powr-implement-complex` (inherits user model) for Moderate/Complex. The decision logic lives in a testable TypeScript function (`selectModel()` in `src/commands/model-select.ts`).
+#### Dynamic routing (haiku downgrade)
+
+Three agents have haiku variants — a second agent file with the same prompt but `model: haiku` in the frontmatter. The orchestrator picks between the default (sonnet) and the haiku variant based on signals available at decision time:
+
+| Agent | Default | Haiku variant | Downgrade signal | Data source |
+|---|---|---|---|---|
+| `powr-investigate` | sonnet | haiku | `estimate <= 1` OR `bug-fix` label | Pre-fetched ticket data |
+| `powr-code-review` | sonnet | haiku | 1 file AND < 50 changed lines | `model-signals --diff` (post-implementation) |
+| `powr-ship-verify` | sonnet | haiku | 1-2 tickets AND all gates passed | Pre-fetched ticket count + gate check |
+
+The logic: if the scope is small and well-defined, haiku handles it fine. If there's any ambiguity — multiple files, larger diffs, failed gates — default to sonnet.
+
+**Fallback rule:** when any required signal is missing (null estimate, no labels, diff stats unavailable), always use the default sonnet file. Missing data means unknown scope, and unknown scope gets the safer model.
+
+#### Implementation routing (separate from haiku)
+
+Implementation uses a different split — not cheaper vs. default, but two distinct agents for different complexity levels:
+
+| Complexity | Agent | Model | How complexity is determined |
+|---|---|---|---|
+| Simple | `powr-implement` | sonnet | Investigation agent outputs `Complexity: Simple` |
+| Moderate / Complex / Unknown | `powr-implement-complex` | inherit | Investigation outputs anything else, or no complexity signal |
+| Fast-path | `powr-implement` | sonnet | `estimate <= 1` + `bug-fix` label (investigation skipped entirely) |
+
+The investigate agent is the one that determines complexity — it's seen the codebase, the ticket, and the acceptance criteria. Its judgment feeds directly into which implement agent runs.
+
+#### Revision overrides
+
+During `/powr revise`, the normal routing rules are overridden:
+
+- **Investigation:** always sonnet (never haiku) — understanding what went wrong requires reasoning depth regardless of ticket estimate
+- **Implementation:** always inherit (powr-implement-complex) — fixing existing code with user feedback context is inherently complex
+
+#### Where the routing happens
+
+- **Investigate + implement routing:** inline in the orchestrator, using pre-fetched ticket data (estimate, labels, complexity). No CLI call needed — the data is already in memory.
+- **Code-review routing:** the ONE case that requires a CLI call (`powr-workmaxxing model-signals <ticket-id> --diff`) because diff stats only exist after implementation.
+- **Ship-verify routing:** inline, using ticket count and gate check results already fetched for the summary.
+
+The decision logic is also implemented as a testable TypeScript function (`selectModel()` in `src/commands/model-select.ts`) for validation and unit testing, though the orchestrator makes its own routing decisions from the same rules.
 
 ### State machine
 
