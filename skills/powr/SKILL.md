@@ -547,9 +547,35 @@ Agent(subagent_type="powr-implement", prompt="
 ```
 Then re-run tests (step 6) and re-review. Maximum 2 retry cycles — if still failing, hand off with issues noted.
 
-```bash
-powr-workmaxxing gate record coderabbit_review --ticket <ticket-id> --evidence '{"documented":true}'
+**After review passes — handle deferred items:**
+
+Parse the `DEFERRED_JSON` line from the code review output. If `Deferred items: 0` or `DEFERRED_JSON: []`, skip to gate recording.
+
+If deferred items > 0, create follow-up tickets **before** recording the gate (the CLI enforces this — `gate record coderabbit_review` will reject evidence with `deferredItems > 0` and empty `deferredTickets`):
+
 ```
+# For each item in DEFERRED_JSON, create a ticket:
+mcp__plugin_linear_linear__save_issue({
+  title: "<title from JSON>",
+  team: "POWR",
+  description: "<description from JSON>\n\nSource: code review of <ticket-id>\nFiles: <files from JSON>",
+  priority: 4,
+  estimate: <estimate from JSON>,
+  labels: <labels from JSON>,
+  cycle: "<current-cycle-id>"
+})
+```
+
+Create tickets in parallel where possible. Collect the created ticket IDs.
+
+Log: "Created <N> deferred ticket(s): <ids>. Code review suggestions are now tracked."
+
+**Record gate with full evidence:**
+```bash
+powr-workmaxxing gate record coderabbit_review --ticket <ticket-id> --evidence '{"verdict":"<verdict>","criticalIssues":<count>,"deferredItems":<count>,"deferredTickets":["POWR-XXX"]}'
+```
+
+The gate will be **rejected** if `deferredItems > 0` and `deferredTickets` is empty. This is mechanical enforcement — you cannot skip creating the follow-up tickets.
 
 #### 8. Hand off
 Try "In Human Review" first, fall back to "In Review":

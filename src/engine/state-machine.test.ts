@@ -132,6 +132,53 @@ describe("validateGateEvidence", () => {
     expect(result.valid).toBe(true);
   });
 
+  it("requires verdict, criticalIssues, deferredItems for coderabbit_review", () => {
+    // Old format should fail
+    const old = validateGateEvidence("coderabbit_review", {
+      documented: true,
+    });
+    expect(old.valid).toBe(false);
+    expect(old.error).toContain("coderabbit_review");
+  });
+
+  it("accepts valid coderabbit_review evidence", () => {
+    const result = validateGateEvidence("coderabbit_review", {
+      verdict: "Approved",
+      criticalIssues: 0,
+      deferredItems: 0,
+      deferredTickets: [],
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("accepts coderabbit_review with deferred items and tickets", () => {
+    const result = validateGateEvidence("coderabbit_review", {
+      verdict: "Approved with suggestions",
+      criticalIssues: 0,
+      deferredItems: 2,
+      deferredTickets: ["POWR-800", "POWR-801"],
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("defaults deferredTickets to empty array if omitted", () => {
+    const result = validateGateEvidence("coderabbit_review", {
+      verdict: "Approved",
+      criticalIssues: 0,
+      deferredItems: 0,
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects invalid verdict for coderabbit_review", () => {
+    const result = validateGateEvidence("coderabbit_review", {
+      verdict: "LGTM",
+      criticalIssues: 0,
+      deferredItems: 0,
+    });
+    expect(result.valid).toBe(false);
+  });
+
   it("requires linearIssueId for ticket_in_progress", () => {
     const result = validateGateEvidence("ticket_in_progress", {});
     expect(result.valid).toBe(false);

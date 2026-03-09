@@ -99,6 +99,20 @@ gateCommand
         }
       }
 
+      // --- Deferred items validation for coderabbit_review ---
+      if (name === "coderabbit_review") {
+        const deferredItems = evidence.deferredItems as number;
+        const deferredTickets = (evidence.deferredTickets as string[]) ?? [];
+        if (deferredItems > 0 && deferredTickets.length === 0) {
+          console.error(
+            `Error: Code review found ${deferredItems} deferred item(s) but no deferred tickets provided. ` +
+              `Create follow-up tickets for each deferred item, then pass their IDs in deferredTickets. ` +
+              `Expected format: ${GATE_EVIDENCE_EXAMPLES.coderabbit_review}`
+          );
+          process.exit(2);
+        }
+      }
+
       // --- Commit SHA validation for code_committed ---
       if (name === "code_committed") {
         const sha = evidence.commitSha as string;
@@ -426,6 +440,9 @@ gateCommand
       const gateResults = TICKET_GATES.map((g) => ({
         name: g,
         passed: passedNames.has(g),
+        evidence: passedNames.has(g)
+          ? gates.getEvidenceForTicketGate(workflow.id, tw.id, g)
+          : null,
       }));
       const allPassed = gateResults.every((g) => g.passed);
 

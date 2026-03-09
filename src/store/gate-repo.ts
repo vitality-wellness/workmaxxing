@@ -97,6 +97,22 @@ export class GateRepo {
     return new Set(rows.map((r) => r.gate_name));
   }
 
+  getEvidenceForTicketGate(
+    workflowId: string,
+    ticketWorkflowId: string,
+    gateName: string
+  ): Record<string, unknown> | null {
+    const row = this.db
+      .prepare(
+        "SELECT evidence FROM gates WHERE workflow_id = ? AND ticket_workflow_id = ? AND gate_name = ? LIMIT 1"
+      )
+      .get(workflowId, ticketWorkflowId, gateName) as
+      | { evidence: string | null }
+      | undefined;
+    if (!row || !row.evidence) return null;
+    return JSON.parse(row.evidence) as Record<string, unknown>;
+  }
+
   isPassed(workflowId: string, gateName: string): boolean {
     const row = this.db
       .prepare(

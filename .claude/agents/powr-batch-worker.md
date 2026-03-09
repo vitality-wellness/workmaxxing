@@ -28,7 +28,7 @@ IMPORTANT: If at any point this ticket requires a non-code human action you cann
 mcp__plugin_linear_linear__save_issue({ id: "<ticket_id>", state: "In Progress" })
 ```
 ```bash
-powr-workmaxxing gate record ticket_in_progress -w <workflow_id> --ticket <ticket_id> --evidence '{}'
+powr-workmaxxing gate record ticket_in_progress -w <workflow_id> --ticket <ticket_id> --evidence '{"linearIssueId":"<ticket_id>"}'
 ```
 
 ## Step 2: Investigate
@@ -104,24 +104,47 @@ If tests fail: fix the failing tests based on the error output, re-commit, and r
   mcp__plugin_linear_linear__save_issue({ id: "<ticket_id>", state: "In Review" })
   ```
 - Self-review all changes: read every changed file, check for bugs, edge cases, security issues, style violations
+- Categorize findings:
+  - **Critical/Warnings**: Must fix before proceeding. Fix them, re-commit, re-test.
+  - **Suggestions/Deferred**: Don't block this ticket but should be tracked. Note each one with a short title, description, file references, and estimate.
 - Create a review document:
   ```
   mcp__plugin_linear_linear__create_document({
     title: "Review: <ticket_id> — <title>",
-    content: "<verdict, issues, suggestions in markdown>"
+    content: "<verdict, issues, suggestions, deferred items in markdown>"
   })
   ```
 - Post timeline comment:
   ```
   mcp__plugin_linear_linear__create_comment({
     issueId: "<uuid>",
-    body: "**Review complete: <Verdict>.** See review document for details."
+    body: "**Review complete: <Verdict>.** Critical issues: <count>. Deferred items: <count>. See review document."
   })
   ```
-- Record gate:
-  ```bash
-  powr-workmaxxing gate record coderabbit_review -w <workflow_id> --ticket <ticket_id> --evidence '{"documented":true}'
-  ```
+
+### Handle deferred items
+
+If deferred items > 0, create follow-up tickets **before** recording the gate:
+```
+mcp__plugin_linear_linear__save_issue({
+  title: "<short title>",
+  team: "POWR",
+  description: "<description>\n\nSource: code review of <ticket_id>\nFiles: <file references>",
+  priority: 4,
+  estimate: <1-3>,
+  labels: ["Improvement"] or ["Bug"]
+})
+```
+
+Collect the created ticket IDs.
+
+### Record gate
+
+```bash
+powr-workmaxxing gate record coderabbit_review -w <workflow_id> --ticket <ticket_id> --evidence '{"verdict":"<Approved|Approved with suggestions|Changes requested>","criticalIssues":<N>,"deferredItems":<N>,"deferredTickets":["POWR-XXX"]}'
+```
+
+The gate will be **rejected** if `deferredItems > 0` and `deferredTickets` is empty. You must create the follow-up tickets first.
 
 ## Done
 

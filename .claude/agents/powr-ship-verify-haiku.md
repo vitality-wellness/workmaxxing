@@ -17,9 +17,9 @@ You receive:
 
 ## Process
 
-### 1. Verify ticket gates
+### 1. Verify ticket gates and deferred items
 
-For each ticket in `ticket_ids`, check gates:
+For each ticket in `ticket_ids`, check gates with evidence:
 
 ```bash
 powr-workmaxxing gate check-ticket <ticket-id> -w <workflow-id> --json
@@ -30,6 +30,11 @@ Verify each ticket passed:
 - `investigation`
 - `code_committed`
 - `coderabbit_review`
+
+**Deferred items audit:** For each ticket's `coderabbit_review` gate evidence, check:
+- `deferredItems` count matches `deferredTickets` array length
+- Each ticket ID in `deferredTickets` is a real ticket (not placeholder)
+- Flag any discrepancies as issues
 
 ### 2. Check ticket statuses in Linear
 
@@ -87,10 +92,12 @@ Use this format for the document content:
 |--------|--------|
 (or "None")
 
-## Deferred Items
-| Ticket | Description | Status |
-|--------|-------------|--------|
-(or "None")
+## Deferred Items Audit
+| Source Ticket | Deferred Items | Deferred Tickets | Status |
+|---------------|---------------|-------------------|--------|
+| POWR-500 | 1 | POWR-600 | Tracked |
+| POWR-501 | 0 | — | Clean |
+(Data from coderabbit_review gate evidence. Flag any row where items > 0 but tickets are missing.)
 
 ## Gaps
 - <planned vs actually built comparison>

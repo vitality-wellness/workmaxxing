@@ -80,7 +80,14 @@ Use this format for the document content:
 - <issues>
 
 ## Deferred Items
-- <ticket_id>: <description> (should be created as backlog ticket)
+
+Items that don't block this ticket but should become backlog tickets. For each, provide enough detail to create a ticket:
+
+| Item | File(s) | Description |
+|------|---------|-------------|
+| <short title> | <file:line references> | <what needs to change and why> |
+
+(or "None")
 ```
 
 Then post a short timeline comment linking to the document:
@@ -99,4 +106,20 @@ REVIEW_COMPLETE: <ticket_id>
 Verdict: <Approved|Approved with suggestions|Changes requested>
 Critical issues: <count>
 Deferred items: <count>
+DEFERRED_JSON: <json array>
+```
+
+The `DEFERRED_JSON` line is a JSON array. Each element has:
+- `title`: short ticket title (imperative mood, e.g. "Replace hardcoded delay with callback")
+- `description`: 2-3 sentences explaining what and why
+- `files`: array of `file:line` references
+- `estimate`: story points (1-3)
+- `labels`: array of labels (e.g. `["Improvement"]` or `["Bug"]`)
+
+If there are no deferred items: `DEFERRED_JSON: []`
+
+Example:
+```
+Deferred items: 1
+DEFERRED_JSON: [{"title":"Replace 0.15s delay with deterministic callback","description":"The onCameraRetryRequested uses a hardcoded 0.15s delay before reopening the camera. Should use the onFlowCompleted callback instead for deterministic timing.","files":["AppRootView.swift:45"],"estimate":1,"labels":["Improvement"]}]
 ```

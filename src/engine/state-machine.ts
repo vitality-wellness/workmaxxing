@@ -23,7 +23,8 @@ export const GATE_EVIDENCE_EXAMPLES: Record<string, string> = {
   investigation: '{"commentUrl": "optional"}',
   code_committed: '{"commitSha": "abc1234"}',
   tests_passed: '{"testCommand": "flutter test"}',
-  coderabbit_review: '{"reviewUrl": "optional"}',
+  coderabbit_review:
+    '{"verdict": "Approved", "criticalIssues": 0, "deferredItems": 0, "deferredTickets": []}',
 };
 
 /** Evidence schemas for each gate. Gates not listed here accept any evidence. */
@@ -49,7 +50,17 @@ const GATE_EVIDENCE_SCHEMAS: Record<string, z.ZodType> = {
   code_committed: z.object({ commitSha: z.string() }).passthrough(),
   tests_passed: z.object({ testCommand: z.string() }).passthrough(),
   coderabbit_review: z
-    .object({ reviewUrl: z.string().optional() })
+    .object({
+      verdict: z.enum([
+        "Approved",
+        "Approved with suggestions",
+        "Changes requested",
+      ]),
+      criticalIssues: z.number(),
+      deferredItems: z.number(),
+      deferredTickets: z.array(z.string()).default([]),
+      reviewUrl: z.string().optional(),
+    })
     .passthrough(),
 };
 
