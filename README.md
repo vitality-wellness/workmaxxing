@@ -13,10 +13,10 @@ Your dev workflow, enforced.
           │explore   │     │review    │     │implement │  │
           │scope     │     │tickets   │     │test      │  │
           └──────────┘     └──────────┘     │review    │  │
-                                            └────┬─────┘  │
-                                                 │        │
-                                            human tests   │
-                                                 │        │
+                                        ┌──▶└────┬─────┘  │
+                                        │        │        │
+                              existing  │   human tests   │
+                              tickets ──┘        │        │
                                            ┌─────▼─────┐  │
                                            │  revise?  │  │
                                            └──┬─────┬──┘  │
@@ -43,6 +43,8 @@ Your dev workflow, enforced.
 
 ```
 /powr spec → /powr plan → /powr execute → test → /powr revise? → /powr ship
+                           ↗
+        existing tickets ─┘
 ```
 
 Say the word, Claude handles the rest.
@@ -178,6 +180,8 @@ You:    /powr execute project "MVP Launch"     ← all tickets in a project
 ```
 
 **Single ticket:** Claude sets the ticket to In Progress, investigates the codebase, implements, runs the test suite, then runs CodeRabbit review. Five quality gates per ticket — it can't skip any of them. If tests fail, Claude fixes the code and re-runs before review starts. Tickets stay in "In Human Review" until you ship.
+
+**Direct execution:** Tickets don't have to come from `/powr plan`. If you created tickets manually in Linear (from an audit, a bug report, etc.), just pass them directly: `/powr execute POWR-791 POWR-792`. Claude validates each ticket has a description and estimate, then executes. The spec/plan ceremony is skipped but all per-ticket quality gates still apply.
 
 **Resumable:** If execution fails mid-batch (context limit, crash, network error), just run `/powr execute` again. It checks gate status per ticket and skips anything already completed.
 
@@ -462,12 +466,17 @@ Implementation routing uses separate agents: `powr-implement` (sonnet) for Simpl
 
 ```
 Feature:  SPECCING → PLANNING → REVIEWING → TICKETING → EXECUTING → SHIPPING → IDLE
+                                                            ↑
+                                          start-execute ────┘  (pre-existing tickets)
+
 Ticket:   QUEUED → INVESTIGATING → IMPLEMENTING → TESTING → CODE_REVIEWING → DONE
                        ▲                                         │
                        └─── /powr revise (human found issues) ───┘
 ```
 
 During CODE_REVIEWING, tickets are "In Review". After review, they move to "In Human Review". `/powr revise` re-enters the ticket at INVESTIGATING with human feedback. During SHIPPING, tickets are marked Done.
+
+`start-execute` creates a workflow directly at EXECUTING for pre-existing tickets (created manually, from audits, etc.). Feature-level gates (spec, plan, review) are skipped — the tickets are presumed ready. Per-ticket gates are fully enforced.
 
 Declarative config. Zod-typed gate evidence. Can't skip or go backwards.
 
@@ -516,7 +525,8 @@ powr-workmaxxing
   install --all                       Add to all known repos
 
   status [-w <id>] [--json]           Where am I?
-  start <name>                        Begin new workflow
+  start <name>                        Begin new workflow (at SPECCING)
+  start-execute <name> [--tickets]   Begin at EXECUTING (pre-existing tickets)
   advance [-w <id>]                   Advance stage (gate-checked)
   bypass                              Skip enforcement
 
