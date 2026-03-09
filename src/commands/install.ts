@@ -310,48 +310,52 @@ export function installInRepo(
   console.log("  Linked skill: /powr");
 
   // Symlink agent definitions
-  const sourceAgentsDir = join(sourceDir, ".claude", "agents");
-  const targetAgentsDir = join(repoPath, ".claude", "agents");
+  const sourceAgentsDir = resolve(join(sourceDir, ".claude", "agents"));
+  const targetAgentsDir = resolve(join(repoPath, ".claude", "agents"));
 
-  if (!dryRun) {
-    mkdirSync(targetAgentsDir, { recursive: true });
-  }
-
-  let agentCount = 0;
-  if (existsSync(sourceAgentsDir)) {
-    const agentFiles = readdirSync(sourceAgentsDir).filter((f) =>
-      /^powr-.*\.md$/.test(f)
-    );
-
-    for (const file of agentFiles) {
-      const srcFile = resolve(join(sourceAgentsDir, file));
-      const destFile = join(targetAgentsDir, file);
-
-      if (dryRun) {
-        console.log(`  [dry-run] Would link agent: ${file}`);
-      } else {
-        // Use lstatSync to detect broken symlinks (existsSync returns false for them)
-        try {
-          lstatSync(destFile);
-          unlinkSync(destFile);
-        } catch {
-          // file does not exist — nothing to remove
-        }
-        try {
-          symlinkSync(srcFile, destFile);
-        } catch {
-          copyFileSync(srcFile, destFile);
-          console.warn(`  Warning: symlink failed for ${file}, copied instead`);
-        }
-      }
-      agentCount++;
+  if (sourceAgentsDir === targetAgentsDir) {
+    console.log("  Skipped agent links (source and target are the same directory)");
+  } else {
+    if (!dryRun) {
+      mkdirSync(targetAgentsDir, { recursive: true });
     }
-  }
 
-  if (!dryRun) {
-    console.log(`  Linked ${agentCount} agent definitions`);
-  } else if (agentCount === 0) {
-    console.log("  [dry-run] No agent files found to link");
+    let agentCount = 0;
+    if (existsSync(sourceAgentsDir)) {
+      const agentFiles = readdirSync(sourceAgentsDir).filter((f) =>
+        /^powr-.*\.md$/.test(f)
+      );
+
+      for (const file of agentFiles) {
+        const srcFile = resolve(join(sourceAgentsDir, file));
+        const destFile = join(targetAgentsDir, file);
+
+        if (dryRun) {
+          console.log(`  [dry-run] Would link agent: ${file}`);
+        } else {
+          // Use lstatSync to detect broken symlinks (existsSync returns false for them)
+          try {
+            lstatSync(destFile);
+            unlinkSync(destFile);
+          } catch {
+            // file does not exist — nothing to remove
+          }
+          try {
+            symlinkSync(srcFile, destFile);
+          } catch {
+            copyFileSync(srcFile, destFile);
+            console.warn(`  Warning: symlink failed for ${file}, copied instead`);
+          }
+        }
+        agentCount++;
+      }
+    }
+
+    if (!dryRun) {
+      console.log(`  Linked ${agentCount} agent definitions`);
+    } else if (agentCount === 0) {
+      console.log("  [dry-run] No agent files found to link");
+    }
   }
 
   // Update settings.local.json — replace hooks section
